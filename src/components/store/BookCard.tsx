@@ -52,10 +52,16 @@ export default function BookCard({ book }: { book: Book }) {
         <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
         {/* Price + button always pinned to bottom */}
         <div className="flex items-center justify-between pt-1 mt-auto border-t border-border/50">
-          <p className="font-semibold text-primary">
+          <p className="text-sm font-semibold text-primary">
             ${book.price.toFixed(2)}
           </p>
-          <AddToCartButton book={book} size="sm" variant="outline" compact />
+          <AddToCartButton
+            book={book}
+            size="sm"
+            variant="outline"
+            compact
+            className="h-7 px-2 text-xs"
+          />
         </div>
       </div>
     </div>
