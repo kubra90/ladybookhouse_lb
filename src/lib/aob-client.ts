@@ -1,0 +1,163 @@
+// Art of Books (AoB) API Client
+//
+// Confirmed working endpoint (via /api/aob-test diagnostic):
+//   GET /item?num_per_page=N&page=N  → returns paginated inventory
+//
+// Auth: AOB-AUTH-USER / AOB-AUTH-PW headers
+// Required env vars: AOB_USERNAME, AOB_PASSWORD
+//
+// NOTE: The API returns ALL records including sold books (qty=0).
+//       We filter to qty > 0 to show only in-stock books.
+
+import type { Book } from "@/types/book";
+
+const AOB_BASE_URL = "https://www.theartofbooks.com/api/2.0";
+
+interface AoBItem {
+  sku: string;
+  isbn: string;
+  title: string;
+  author: string;
+  price: string;
+  condition: string;       // numeric string "1"–"5"
+  notes: string | null;
+  description: string | null;
+  image: string | null;
+  z_category: string | null;
+  qty: string | null;      // "0" = sold, "1"+ = in stock
+  media: string | null;
+  publisher: string | null;
+}
+
+interface AoBResponse {
+  count: string;
+  results: AoBItem[];
+}
+
+function getConfig() {
+  const username = process.env.AOB_USERNAME;
+  const password = process.env.AOB_PASSWORD;
+  if (!username || !password) return null;
+  return { username, password };
+}
+
+export function isConfigured(): boolean {
+  return getConfig() !== null;
+}
+
+async function aobFetch<T>(endpoint: string): Promise<T> {
+  const config = getConfig();
+  if (!config) throw new Error("AoB API not configured");
+
+  const res = await fetch(`${AOB_BASE_URL}${endpoint}`, {
+    headers: {
+      "AOB-AUTH-USER": config.username,
+      "AOB-AUTH-PW": config.password,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`AoB API error: ${res.status} ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+// AoB condition codes (confirmed from API data)
+const conditionMap: Record<string, Book["condition"]> = {
+  "11": "New",
+  "1":  "Like New",
+  "2":  "Very Good",
+  "3":  "Good",
+  "4":  "Acceptable",
+};
+
+// Strip format tags and author name appended to title by AoB
+// e.g. "Some Title [Paperback] Author Name" → "Some Title"
+function cleanTitle(raw: string, rawAuthor?: string): string {
+  let title = raw
+    .replace(/\s*\[(Paperback|Hardcover|Mass Market Paperback|Hardback|Audio CD|Board Book|Spiral-bound|Large Print)\]/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (rawAuthor) {
+    // Strip full author from end: "Title Weber, Max" → "Title"
+    const escaped = rawAuthor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    title = title.replace(new RegExp(`\\s+${escaped}\\s*$`), "").trim();
+
+    // Strip just last name if "Last, First" format
+    const lastName = rawAuthor.split(",")[0]?.trim();
+    if (lastName && lastName.length > 2) {
+      const escapedLast = lastName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      title = title.replace(new RegExp(`\\s+${escapedLast}\\s*$`), "").trim();
+    }
+  }
+
+  return title;
+}
+
+// Normalize "Last, First" → "First Last"
+function normalizeAuthor(raw: string): string {
+  if (!raw) return "";
+  const match = raw.match(/^([^,]+),\s*(.+)$/);
+  if (match) return `${match[2].trim()} ${match[1].trim()}`;
+  return raw.trim();
+}
+
+function mapItem(item: AoBItem): Book {
+  const qty = parseInt(item.qty || "0", 10);
+  return {
+    id: item.sku,
+    isbn: item.isbn || "",
+    title: cleanTitle(item.title || "", item.author),
+    author: normalizeAuthor(item.author || ""),
+    price: parseFloat(item.price) || 0,
+    condition: conditionMap[item.condition] || "Good",
+    description: item.notes || item.description || "",
+    imageUrl: item.image || "",
+    category: item.z_category || "",
+    quantity: qty,
+    isAvailable: qty > 0,
+  };
+}
+
+// Fetch ALL in-stock books from AoB in one call (large page size).
+// The API returns sold books (qty=0) mixed in, so we filter them out.
+// Result is cached for 5 minutes by Next.js revalidate.
+export async function fetchAllAvailableBooks(): Promise<Book[]> {
+  // Fetch up to 6000 — covers the full catalog including sold records
+  const data = await aobFetch<AoBResponse>(`/item?num_per_page=6000&page=1`);
+  return (data.results || [])
+    .map(mapItem)
+    .filter((b) => b.isAvailable);
+}
+
+// Kept for book detail page — try SKU then ISBN lookup
+export async function fetchBook(id: string): Promise<Book | null> {
+  try {
+    const data = await aobFetch<AoBResponse>(
+      `/item?sku=${encodeURIComponent(id)}&num_per_page=1`
+    );
+    if (data.results?.length) return mapItem(data.results[0]);
+
+    const data2 = await aobFetch<AoBResponse>(
+      `/item?isbn=${encodeURIComponent(id)}&num_per_page=1`
+    );
+    if (data2.results?.length) return mapItem(data2.results[0]);
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function markSold(bookId: string): Promise<boolean> {
+  try {
+    await aobFetch(`/item/${bookId}/sold`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to mark book ${bookId} as sold:`, error);
+    return false;
+  }
+}
