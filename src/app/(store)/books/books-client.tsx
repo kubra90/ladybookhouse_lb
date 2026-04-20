@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Search, SlidersHorizontal, X, Loader2 } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
+import BrandedLoader from "@/components/store/BrandedLoader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -364,9 +365,7 @@ function BooksClientInner() {
         {/* Book grid */}
         <div className="flex-1">
           {loading ? (
-            <div className="py-20 flex justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <BrandedLoader label="Loading books…" />
           ) : loadError ? (
             <div className="py-20 text-center">
               <p className="font-heading text-lg font-semibold mb-2">
@@ -470,9 +469,7 @@ export default function BooksClient() {
     <Suspense
       fallback={
         <div className="container py-8 md:py-12">
-          <div className="py-20 flex justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
+          <BrandedLoader label="Loading books…" />
         </div>
       }
     >
