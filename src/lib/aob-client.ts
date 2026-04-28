@@ -24,6 +24,7 @@ interface AoBItem {
   description: string | null;
   image: string | null;
   z_category: string | null;
+  z_browse: string | null; // human-readable browse category (e.g. "Art & Music")
   qty: string | null;      // "0" = sold, "1"+ = in stock
   media: string | null;
   publisher: string | null;
@@ -97,6 +98,32 @@ function cleanTitle(raw: string, rawAuthor?: string): string {
   return title;
 }
 
+// Normalize z_browse values so they match the dropdown labels.
+// AoB returns inconsistent casing/spacing/plurals — collapse them here.
+const categoryAliases: Record<string, string> = {
+  "art&music": "Art & Music",
+  "education&health": "Education & Health",
+  "fiction&literature": "Fiction & Literature",
+  "history&memory": "History & Memory",
+  "hm": "History & Memory",
+  "religion&philosophy": "Religion & Philosophy",
+  "cookbook": "Cookbooks",
+  "graphic novel": "Graphic Novels",
+  "medical": "Medicine",
+  "sport": "Sports",
+  "textbook": "Textbooks",
+  "foreign language": "Language",
+};
+
+function normalizeCategory(raw: string | null): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  const key = trimmed.toLowerCase();
+  if (categoryAliases[key]) return categoryAliases[key];
+  // Title-case the input as a fallback for already-clean values like "Bestseller"
+  return trimmed.replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
+}
+
 // Normalize "Last, First" → "First Last"
 function normalizeAuthor(raw: string): string {
   if (!raw) return "";
@@ -116,7 +143,7 @@ function mapItem(item: AoBItem): Book {
     condition: conditionMap[item.condition] || "Good",
     description: item.notes || item.description || "",
     imageUrl: item.image || "",
-    category: item.z_category || "",
+    category: normalizeCategory(item.z_browse || item.z_category),
     quantity: qty,
     isAvailable: qty > 0,
   };

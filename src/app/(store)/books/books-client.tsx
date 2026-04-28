@@ -62,7 +62,7 @@ const categories = [
   "Technology",
   "Textbooks",
   "Travel",
-];
+] as const;
 
 const conditions: Array<Book["condition"] | "All"> = [
   "All",
