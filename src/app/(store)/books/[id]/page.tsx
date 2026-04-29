@@ -6,11 +6,64 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import BookCard from "@/components/store/BookCard";
 import AddToCartButton from "@/components/store/AddToCartButton";
-import { fetchBook, isConfigured } from "@/lib/aob-client";
+import { fetchAllAvailableBooks, fetchBook, isConfigured } from "@/lib/aob-client";
 import { placeholderBooks } from "@/lib/placeholder-books";
+import type { Book } from "@/types/book";
+
+const RELATED_COUNT = 6;
+
+// Pick `count` random items from `pool` without replacement.
+// Fisher-Yates on a copy of the indices we still want.
+function pickRandom<T>(pool: T[], count: number): T[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, count);
+}
+
+function buildRelated(book: Book, pool: Book[]): Book[] {
+  const others = pool.filter((b) => b.id !== book.id);
+  const sameCategory = book.category
+    ? others.filter((b) => b.category === book.category)
+    : [];
+
+  const picked = pickRandom(sameCategory, RELATED_COUNT);
+  if (picked.length >= RELATED_COUNT) return picked;
+
+  // Fill the rest from outside the category so the section is never empty.
+  const fillerPool = others.filter((b) => !picked.some((p) => p.id === b.id));
+  return [...picked, ...pickRandom(fillerPool, RELATED_COUNT - picked.length)];
+}
+
+// Single AoB roundtrip: fetches the full inventory, returns both the book and
+// the suggestions. Fall back to per-SKU + placeholders if the bulk call fails.
+async function loadBookAndRelated(
+  id: string
+): Promise<{ book: Book | null; suggestions: Book[] }> {
+  if (isConfigured()) {
+    try {
+      const pool = await fetchAllAvailableBooks();
+      const book = pool.find((b) => b.id === id) ?? null;
+      if (book) return { book, suggestions: buildRelated(book, pool) };
+      // Fall through to per-SKU lookup — book may exist but be filtered out
+      // (e.g. qty=0). The suggestions list will be empty, which is fine.
+      const single = await fetchBook(id);
+      return { book: single, suggestions: single ? buildRelated(single, pool) : [] };
+    } catch (error) {
+      console.error("AoB fetch failed, falling back to placeholders:", error);
+    }
+  }
+  const book = placeholderBooks.find((b) => b.id === id) ?? null;
+  return {
+    book,
+    suggestions: book ? buildRelated(book, placeholderBooks) : [],
+  };
+}
 
 export const runtime = "edge";
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 async function loadBook(id: string) {
   if (isConfigured()) {
@@ -59,29 +112,11 @@ export default async function BookDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const book = await loadBook(id);
+  const { book, suggestions } = await loadBookAndRelated(id);
 
   if (!book) {
     notFound();
   }
-
-  const relatedBooks = placeholderBooks
-    .filter((b) => b.id !== book.id && b.category === book.category)
-    .slice(0, 3);
-
-  // If not enough in same category, fill with others
-  const suggestions =
-    relatedBooks.length >= 3
-      ? relatedBooks
-      : [
-          ...relatedBooks,
-          ...placeholderBooks
-            .filter(
-              (b) =>
-                b.id !== book.id && !relatedBooks.some((r) => r.id === b.id)
-            )
-            .slice(0, 3 - relatedBooks.length),
-        ];
 
   return (
     <div className="container py-8 md:py-12">

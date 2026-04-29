@@ -149,15 +149,33 @@ function mapItem(item: AoBItem): Book {
   };
 }
 
+// In-memory cache for the bulk inventory fetch.
+// Edge runtime doesn't honor Next.js fetch revalidate, so we cache here.
+// One entry per worker instance; refreshed at most every CACHE_TTL ms.
+const CACHE_TTL = 5 * 60 * 1000;
+let allBooksCache: { books: Book[]; expires: number } | null = null;
+let inflightAllBooks: Promise<Book[]> | null = null;
+
 // Fetch ALL in-stock books from AoB in one call (large page size).
 // The API returns sold books (qty=0) mixed in, so we filter them out.
-// Result is cached for 5 minutes by Next.js revalidate.
 export async function fetchAllAvailableBooks(): Promise<Book[]> {
-  // Fetch up to 6000 — covers the full catalog including sold records
-  const data = await aobFetch<AoBResponse>(`/item?num_per_page=6000&page=1`);
-  return (data.results || [])
-    .map(mapItem)
-    .filter((b) => b.isAvailable);
+  const now = Date.now();
+  if (allBooksCache && allBooksCache.expires > now) return allBooksCache.books;
+  // De-dupe concurrent callers so we don't fire multiple ~20s requests.
+  if (inflightAllBooks) return inflightAllBooks;
+
+  inflightAllBooks = (async () => {
+    try {
+      const data = await aobFetch<AoBResponse>(`/item?num_per_page=6000&page=1`);
+      const books = (data.results || []).map(mapItem).filter((b) => b.isAvailable);
+      allBooksCache = { books, expires: Date.now() + CACHE_TTL };
+      return books;
+    } finally {
+      inflightAllBooks = null;
+    }
+  })();
+
+  return inflightAllBooks;
 }
 
 // Kept for book detail page — try SKU then ISBN lookup
