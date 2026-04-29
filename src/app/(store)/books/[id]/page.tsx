@@ -4,63 +4,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import BookCard from "@/components/store/BookCard";
+import RelatedBooks from "@/components/store/RelatedBooks";
 import AddToCartButton from "@/components/store/AddToCartButton";
-import { fetchAllAvailableBooks, fetchBook, isConfigured } from "@/lib/aob-client";
+import { fetchBook, isConfigured } from "@/lib/aob-client";
 import { placeholderBooks } from "@/lib/placeholder-books";
-import type { Book } from "@/types/book";
-
-const RELATED_COUNT = 6;
-
-// Pick `count` random items from `pool` without replacement.
-// Fisher-Yates on a copy of the indices we still want.
-function pickRandom<T>(pool: T[], count: number): T[] {
-  const copy = [...pool];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, count);
-}
-
-function buildRelated(book: Book, pool: Book[]): Book[] {
-  const others = pool.filter((b) => b.id !== book.id);
-  const sameCategory = book.category
-    ? others.filter((b) => b.category === book.category)
-    : [];
-
-  const picked = pickRandom(sameCategory, RELATED_COUNT);
-  if (picked.length >= RELATED_COUNT) return picked;
-
-  // Fill the rest from outside the category so the section is never empty.
-  const fillerPool = others.filter((b) => !picked.some((p) => p.id === b.id));
-  return [...picked, ...pickRandom(fillerPool, RELATED_COUNT - picked.length)];
-}
-
-// Single AoB roundtrip: fetches the full inventory, returns both the book and
-// the suggestions. Fall back to per-SKU + placeholders if the bulk call fails.
-async function loadBookAndRelated(
-  id: string
-): Promise<{ book: Book | null; suggestions: Book[] }> {
-  if (isConfigured()) {
-    try {
-      const pool = await fetchAllAvailableBooks();
-      const book = pool.find((b) => b.id === id) ?? null;
-      if (book) return { book, suggestions: buildRelated(book, pool) };
-      // Fall through to per-SKU lookup — book may exist but be filtered out
-      // (e.g. qty=0). The suggestions list will be empty, which is fine.
-      const single = await fetchBook(id);
-      return { book: single, suggestions: single ? buildRelated(single, pool) : [] };
-    } catch (error) {
-      console.error("AoB fetch failed, falling back to placeholders:", error);
-    }
-  }
-  const book = placeholderBooks.find((b) => b.id === id) ?? null;
-  return {
-    book,
-    suggestions: book ? buildRelated(book, placeholderBooks) : [],
-  };
-}
 
 export const runtime = "edge";
 export const revalidate = 300;
@@ -112,7 +59,7 @@ export default async function BookDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { book, suggestions } = await loadBookAndRelated(id);
+  const book = await loadBook(id);
 
   if (!book) {
     notFound();
@@ -199,19 +146,8 @@ export default async function BookDetailPage({
         </div>
       </div>
 
-      {/* You might also like */}
-      {suggestions.length > 0 && (
-        <section className="mt-16 md:mt-20">
-          <h2 className="font-heading text-xl font-bold mb-6">
-            You Might Also Like
-          </h2>
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
-            {suggestions.map((b) => (
-              <BookCard key={b.id} book={b} />
-            ))}
-          </div>
-        </section>
-      )}
+      <RelatedBooks bookId={book.id} category={book.category ?? null} />
+
     </div>
   );
 }
