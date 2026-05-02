@@ -65,7 +65,7 @@ function buildOrderEmailHtml(p: OrderEmailParams): string {
         ${addr.line1 ? `<div>${escapeHtml(addr.line1)}</div>` : ""}
         ${addr.line2 ? `<div>${escapeHtml(addr.line2)}</div>` : ""}
         <div>
-          ${[addr.city, addr.state, addr.postal_code].filter(Boolean).map(escapeHtml).join(", ")}
+          ${[addr.city, addr.state, addr.postal_code].filter((v): v is string => Boolean(v)).map(escapeHtml).join(", ")}
         </div>
         ${addr.country ? `<div>${escapeHtml(addr.country)}</div>` : ""}
       </div>`

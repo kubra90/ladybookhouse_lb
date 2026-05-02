@@ -68,12 +68,13 @@ export async function POST(request: Request) {
         await sendOrderConfirmationEmail({
           to: customerEmail,
           customerName: session.customer_details?.name ?? null,
-          orderId: session.id,
+          orderId: `LBH-${session.id.slice(-8).toUpperCase()}`,
           items,
           subtotal,
           shipping,
           total,
-          shippingAddress: session.shipping_details?.address ?? null,
+          shippingAddress:
+            session.collected_information?.shipping_details?.address ?? null,
         });
       } catch (err) {
         console.error("Failed to send order confirmation email:", err);
