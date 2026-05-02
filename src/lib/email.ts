@@ -1,0 +1,156 @@
+import { Resend } from "resend";
+
+let _resend: Resend | null = null;
+
+function getResend(): Resend {
+  if (!_resend) {
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error("RESEND_API_KEY is not set. Add it to your .env.local file.");
+    }
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
+
+export type OrderEmailItem = {
+  title: string;
+  quantity: number;
+  amount: number;
+};
+
+export type OrderEmailParams = {
+  to: string;
+  customerName?: string | null;
+  orderId: string;
+  items: OrderEmailItem[];
+  subtotal: number;
+  shipping: number;
+  total: number;
+  shippingAddress?: {
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+  } | null;
+};
+
+const FROM = process.env.RESEND_FROM_EMAIL || "Lady Bookhouse <onboarding@resend.dev>";
+
+function formatMoney(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function buildOrderEmailHtml(p: OrderEmailParams): string {
+  const itemsRows = p.items
+    .map(
+      (it) => `
+        <tr>
+          <td style="padding:12px 0;border-bottom:1px solid #eee;font-family:Georgia,serif;color:#3a2e1f;">
+            ${escapeHtml(it.title)}${it.quantity > 1 ? ` × ${it.quantity}` : ""}
+          </td>
+          <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;font-family:Georgia,serif;color:#3a2e1f;">
+            ${formatMoney(it.amount)}
+          </td>
+        </tr>`
+    )
+    .join("");
+
+  const addr = p.shippingAddress;
+  const addressBlock = addr
+    ? `
+      <div style="margin-top:24px;padding:16px;background:#faf6ef;border-radius:8px;font-family:Georgia,serif;color:#3a2e1f;">
+        <div style="font-weight:600;margin-bottom:8px;">Shipping to</div>
+        ${addr.line1 ? `<div>${escapeHtml(addr.line1)}</div>` : ""}
+        ${addr.line2 ? `<div>${escapeHtml(addr.line2)}</div>` : ""}
+        <div>
+          ${[addr.city, addr.state, addr.postal_code].filter(Boolean).map(escapeHtml).join(", ")}
+        </div>
+        ${addr.country ? `<div>${escapeHtml(addr.country)}</div>` : ""}
+      </div>`
+    : "";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f1e7;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1e7;padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:32px 32px 16px 32px;text-align:center;background:#ede4d3;">
+                <div style="font-family:Georgia,serif;font-size:24px;font-weight:700;color:#7a4a1f;letter-spacing:0.5px;">
+                  Lady Bookhouse
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 8px 0;font-family:Georgia,serif;font-size:22px;color:#3a2e1f;">
+                  Thank you${p.customerName ? `, ${escapeHtml(p.customerName)}` : ""}!
+                </h1>
+                <p style="margin:0 0 24px 0;font-family:Georgia,serif;color:#5a4a35;line-height:1.6;">
+                  Your order has been received and your payment was successful.
+                  We&rsquo;ll pack your books with care and ship them out shortly.
+                </p>
+
+                <div style="font-family:Georgia,serif;color:#7a6a55;font-size:13px;margin-bottom:8px;">
+                  Order ${escapeHtml(p.orderId)}
+                </div>
+
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
+                  ${itemsRows}
+                  <tr>
+                    <td style="padding:12px 0;font-family:Georgia,serif;color:#5a4a35;">Subtotal</td>
+                    <td style="padding:12px 0;text-align:right;font-family:Georgia,serif;color:#5a4a35;">${formatMoney(p.subtotal)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:4px 0;font-family:Georgia,serif;color:#5a4a35;">Shipping</td>
+                    <td style="padding:4px 0;text-align:right;font-family:Georgia,serif;color:#5a4a35;">
+                      ${p.shipping === 0 ? "Free" : formatMoney(p.shipping)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 0 0 0;border-top:2px solid #3a2e1f;font-family:Georgia,serif;font-weight:700;color:#3a2e1f;">Total</td>
+                    <td style="padding:12px 0 0 0;border-top:2px solid #3a2e1f;text-align:right;font-family:Georgia,serif;font-weight:700;color:#3a2e1f;">${formatMoney(p.total)}</td>
+                  </tr>
+                </table>
+
+                ${addressBlock}
+
+                <p style="margin:32px 0 0 0;font-family:Georgia,serif;color:#7a6a55;font-size:13px;line-height:1.6;">
+                  Questions? Reply to this email and we&rsquo;ll get back to you.
+                  <br />
+                  &mdash; Lady Bookhouse
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export async function sendOrderConfirmationEmail(params: OrderEmailParams) {
+  const html = buildOrderEmailHtml(params);
+  const subject = `Order Confirmed · Lady Bookhouse`;
+  const result = await getResend().emails.send({
+    from: FROM,
+    to: params.to,
+    subject,
+    html,
+  });
+  return result;
+}

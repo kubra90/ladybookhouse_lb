@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { markSold, isConfigured } from "@/lib/aob-client";
+import { sendOrderConfirmationEmail } from "@/lib/email";
 import Stripe from "stripe";
 
 export const runtime = "edge";
@@ -36,7 +37,6 @@ export async function POST(request: Request) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    // Log the completed order
     console.log("Order completed:", {
       sessionId: session.id,
       customerEmail: session.customer_details?.email,
@@ -44,10 +44,40 @@ export async function POST(request: Request) {
       bookIds: session.metadata?.bookIds,
     });
 
-    // Mark books as sold in AoB to remove from all venues
     if (isConfigured() && session.metadata?.bookIds) {
       const bookIds = session.metadata.bookIds.split(",");
       await Promise.all(bookIds.map((id) => markSold(id.trim())));
+    }
+
+    const customerEmail = session.customer_details?.email;
+    if (customerEmail && process.env.RESEND_API_KEY) {
+      try {
+        const lineItems = await getStripe().checkout.sessions.listLineItems(
+          session.id,
+          { limit: 100 }
+        );
+        const items = lineItems.data.map((li) => ({
+          title: li.description || "Book",
+          quantity: li.quantity ?? 1,
+          amount: li.amount_total,
+        }));
+        const total = session.amount_total ?? 0;
+        const shipping = session.shipping_cost?.amount_total ?? 0;
+        const subtotal = total - shipping;
+
+        await sendOrderConfirmationEmail({
+          to: customerEmail,
+          customerName: session.customer_details?.name ?? null,
+          orderId: session.id,
+          items,
+          subtotal,
+          shipping,
+          total,
+          shippingAddress: session.shipping_details?.address ?? null,
+        });
+      } catch (err) {
+        console.error("Failed to send order confirmation email:", err);
+      }
     }
   }
 

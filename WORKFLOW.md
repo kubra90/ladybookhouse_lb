@@ -214,6 +214,31 @@
 
 ---
 
+## Phase 11 — Checkout Fixes & Branded Order Emails ✅
+**Completed:** 2026-04-30
+
+- [x] Fix: Stripe Checkout was charging book subtotal only, ignoring the shipping fee shown on the cart page
+- [x] Fix: Corrupted `.next` dev cache caused homepage to render with no styles (RSC manifest / webpack module errors)
+- [x] Investigate Stripe built-in customer receipts — blocked by sandbox restriction ("can only send emails to team members and aliases in sandbox mode")
+- [x] Add Resend integration for branded "Order Confirmed · Lady Bookhouse" emails sent from the app on successful payment
+- [x] New `src/lib/email.ts` with lazy Resend client + warm-palette HTML order email template (line items, subtotal, shipping, total, shipping address)
+- [x] Stripe webhook (`/api/webhooks/stripe`) now fetches Checkout Session line items and triggers `sendOrderConfirmationEmail` after `markSold`
+- [x] `RESEND_API_KEY` and `RESEND_FROM_EMAIL` added to `.env.local.example`
+
+**Notes:**
+- **Shipping fix:** `/api/checkout` now computes `subtotal` server-side and adds a `shipping_options` fixed-amount rate to the Stripe Checkout Session (`$0` if subtotal ≥ `$35`, else `$4.99` — matches the cart page rule). Also enabled `shipping_address_collection` for US so the address is captured for fulfillment and shown on the email.
+- **`.next` cache fix:** Symptoms were `Could not find the module "...#SegmentViewNode" in the React Client Manifest` and `__webpack_modules__[moduleId] is not a function`. Resolved by stopping the dev server, `rm -rf .next`, and restarting. Unrelated to the checkout edit.
+- **Why we skipped Stripe's built-in receipt:** Stripe Dashboard → *Settings → Emails → Successful payments* is enabled, but in sandbox mode Stripe will only deliver to team-member emails. Real customer addresses are silently dropped. Activating the account (resolving the 2 past-due verification tasks in the dashboard banner) would unlock this, but Resend gives us a richer branded email regardless of Stripe activation status.
+- **Resend setup steps for the user:**
+  1. Sign up at resend.com (10K emails/mo free).
+  2. Create API key, paste into `.env.local` as `RESEND_API_KEY`.
+  3. Restart dev server.
+  4. While `RESEND_FROM_EMAIL=onboarding@resend.dev`, Resend only delivers to the email that owns the Resend account. To send to any customer: Resend → *Domains → Add Domain* `theladybookhouse.com`, add the DNS records, then change `RESEND_FROM_EMAIL` to `Lady Bookhouse <orders@theladybookhouse.com>`.
+- Email send is wrapped in try/catch and gated on `RESEND_API_KEY` being set — webhook keeps working without it (Stripe won't retry on email failures).
+- Line items are fetched via `stripe.checkout.sessions.listLineItems(session.id)` to get the real titles and amounts; `shipping_cost.amount_total` and `shipping_details.address` are read from the session for the email.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -228,3 +253,4 @@
 | 2026-04-07 | 8 | Admin dashboard complete. NextAuth credentials login, admin layout with sidebar, dashboard with stats, featured books management with toggle UI and JSON persistence. |
 | 2026-04-08 | 9 | Cloudflare Pages deploy config complete. wrangler.toml, pages:build/dev/deploy scripts, edge runtime on books API routes, featured books refactored to remove fs dependency. |
 | 2026-04-10 | 10 | Final Polish complete. Fixed dev server (empty .env.local caused NextAuth crash). SEO: sitemap.ts, robots.ts, metadataBase + OG in root layout, per-page metadata on all routes, generateMetadata on book detail. Error handling: not-found.tsx (custom 404), error.tsx (global boundary), improved catalog fetch error with Retry button. Performance: next/image in BookCard + detail page, three loading.tsx skeletons (homepage, catalog, detail), next.config image remotePatterns. Accessibility: skip-to-content link, aria-hidden on decorative icons, aria-expanded + aria-controls on mobile menu. README replaced with full project docs. |
+| 2026-04-30 | 11 | Checkout fixes & branded order emails. Stripe Checkout now charges book subtotal + shipping (added `shipping_options` rate to session, free over $35 else $4.99). Cleared corrupted `.next` cache to fix unstyled-homepage rendering. Added Resend integration: new `src/lib/email.ts` with branded HTML template; webhook fetches line items and sends "Order Confirmed · Lady Bookhouse" email after `checkout.session.completed`. Skipped Stripe's built-in receipts (sandbox blocks delivery to non-team emails). Added `RESEND_API_KEY` / `RESEND_FROM_EMAIL` to env example. |

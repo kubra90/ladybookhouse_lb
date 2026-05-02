@@ -36,9 +36,26 @@ export async function POST(request: Request) {
 
     const bookIds = items.map((item) => item.book.id).join(",");
 
+    const subtotal = items.reduce(
+      (sum, item) => sum + item.book.price * item.quantity,
+      0
+    );
+    const shippingAmount = subtotal >= 35 ? 0 : 499;
+
     const session = await getStripe().checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
+      shipping_address_collection: { allowed_countries: ["US"] },
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: "fixed_amount",
+            fixed_amount: { amount: shippingAmount, currency: "usd" },
+            display_name:
+              shippingAmount === 0 ? "Free shipping" : "Standard shipping",
+          },
+        },
+      ],
       metadata: {
         bookIds,
       },
