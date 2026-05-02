@@ -38,7 +38,7 @@ function OrderConfirmationContent() {
         {sessionId && (
           <p className="text-xs text-muted-foreground">
             Order reference:{" "}
-            <span className="font-mono">{sessionId.slice(-8)}</span>
+            <span className="font-mono">LBH-{sessionId.slice(-8).toUpperCase()}</span>
           </p>
         )}
 
