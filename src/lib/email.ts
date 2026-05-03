@@ -154,3 +154,58 @@ export async function sendOrderConfirmationEmail(params: OrderEmailParams) {
   });
   return result;
 }
+
+export type ContactEmailParams = {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+};
+
+const CONTACT_FROM =
+  process.env.CONTACT_FROM_EMAIL || "Lady Bookhouse Contact <contact@theladybookhouse.com>";
+const CONTACT_TO = process.env.CONTACT_TO_EMAIL || "info@theladybookhouse.com";
+
+function buildContactEmailHtml(p: ContactEmailParams): string {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f1e7;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1e7;padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:24px 32px;background:#ede4d3;font-family:Georgia,serif;font-size:18px;font-weight:700;color:#7a4a1f;">
+                New contact form message
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
+                <div style="margin-bottom:8px;"><strong>From:</strong> ${escapeHtml(p.name)} &lt;${escapeHtml(p.email)}&gt;</div>
+                <div style="margin-bottom:24px;"><strong>Subject:</strong> ${escapeHtml(p.subject)}</div>
+                <div style="padding:16px;background:#faf6ef;border-radius:8px;white-space:pre-wrap;">${escapeHtml(p.message)}</div>
+                <p style="margin-top:24px;color:#7a6a55;font-size:13px;">
+                  Reply to this email to respond directly to ${escapeHtml(p.name)}.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+export async function sendContactEmail(params: ContactEmailParams) {
+  const html = buildContactEmailHtml(params);
+  const subject = `[Contact] ${params.subject}`;
+  const result = await getResend().emails.send({
+    from: CONTACT_FROM,
+    to: CONTACT_TO,
+    replyTo: params.email,
+    subject,
+    html,
+  });
+  return result;
+}

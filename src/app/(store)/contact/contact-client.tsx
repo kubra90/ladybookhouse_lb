@@ -23,6 +23,7 @@ export default function ContactClient() {
     message: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
+  const [honeypot, setHoneypot] = useState("");
 
   function validate(): FormErrors {
     const errs: FormErrors = {};
@@ -50,17 +51,41 @@ export default function ContactClient() {
 
     setSubmitting(true);
 
-    // Simulate form submission (no email backend yet)
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formData, website: honeypot }),
+      });
 
-    toast({
-      title: "Message sent!",
-      description:
-        "Thank you for reaching out. We'll get back to you as soon as possible.",
-    });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          title: "Couldn't send your message",
+          description:
+            data.error ||
+            "Something went wrong. Please email info@theladybookhouse.com directly.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    setFormData({ name: "", email: "", subject: "", message: "" });
-    setSubmitting(false);
+      toast({
+        title: "Message sent!",
+        description:
+          "Thank you for reaching out. We'll get back to you as soon as possible.",
+      });
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch {
+      toast({
+        title: "Couldn't send your message",
+        description:
+          "Network error. Please try again or email info@theladybookhouse.com directly.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleChange(
@@ -100,6 +125,19 @@ export default function ContactClient() {
 
         {/* Contact form */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          <div aria-hidden="true" className="absolute left-[-9999px] h-0 w-0 overflow-hidden">
+            <label htmlFor="website">Website</label>
+            <input
+              id="website"
+              name="website"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+            />
+          </div>
+
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label

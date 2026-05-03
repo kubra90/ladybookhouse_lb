@@ -5,6 +5,8 @@ pages_build_output_dir = ".vercel/output/static"
 
 [vars]
 NEXT_PUBLIC_SITE_URL = "https://theladybookhouse.com"
+CONTACT_FROM_EMAIL = "Lady Bookhouse Contact <contact@theladybookhouse.com>"
+CONTACT_TO_EMAIL = "info@theladybookhouse.com"
 
 # Set these as secrets in the Cloudflare dashboard (not here):
 # ADMIN_PASSWORD
