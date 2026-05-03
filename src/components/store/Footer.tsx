@@ -20,7 +20,7 @@ export default function Footer() {
   return (
     <footer className="border-t bg-warm-sand/50">
       <div className="container py-10">
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -56,6 +56,37 @@ export default function Footer() {
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 Contact
+              </Link>
+            </nav>
+          </div>
+
+          {/* Policies */}
+          <div className="space-y-3">
+            <h3 className="font-heading text-sm font-semibold">Policies</h3>
+            <nav className="flex flex-col gap-2">
+              <Link
+                href="/shipping"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Shipping
+              </Link>
+              <Link
+                href="/refunds"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Refunds
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Privacy
+              </Link>
+              <Link
+                href="/terms"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Terms
               </Link>
             </nav>
           </div>

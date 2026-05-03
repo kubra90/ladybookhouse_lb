@@ -90,7 +90,7 @@ export default function ContactClient() {
         <div className="flex flex-wrap justify-center gap-6 mb-10">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Mail className="h-4 w-4 text-primary" />
-            <span>info@ladybookhouse.com</span>
+            <span>info@theladybookhouse.com</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <MapPin className="h-4 w-4 text-primary" />
