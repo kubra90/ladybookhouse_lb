@@ -239,6 +239,27 @@
 
 ---
 
+## Phase 12 — Email Delivery in Production & Branded Order IDs 🚧
+**Started:** 2026-05-02
+
+- [x] Diagnose why Resend email did not arrive after the first live test purchase — root cause was `RESEND_API_KEY` missing from Cloudflare Pages env (only added to `.env.local`)
+- [x] Add `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to Cloudflare Pages → Production env vars
+- [x] Trigger redeploy via `npm run pages:deploy` so the new env vars take effect (Cloudflare does not apply env var changes to existing deployments)
+- [x] Confirmed working: webhook returned 200 OK in Stripe, branded "Order Confirmed · Lady Bookhouse" email landed in inbox
+- [x] Friendlier order reference: replace raw Stripe `cs_test_…` / `cs_live_…` ID with `LBH-${last 8 chars uppercased}` — change in `/api/webhooks/stripe` (email `orderId`) and `/order-confirmation` page so both display the same code
+- [x] Resend domain verification for `theladybookhouse.com` — used Resend's Cloudflare auto-configure flow; DKIM (TXT `resend._domainkey`), SPF (TXT `send`), MX (`send` → `feedback-smtp.us-east-1.amazonses.com`) all show "Verified". Skipped DMARC (optional) and "Enable Receiving" (inbound email not needed).
+- [ ] Update `RESEND_FROM_EMAIL` in Cloudflare Pages to `Lady Bookhouse <orders@theladybookhouse.com>` and redeploy
+- [ ] End-to-end test with a non-self customer email (any inbox other than the Resend account owner's) to confirm domain-based sending works for real customers
+
+**Notes:**
+- **Why nothing arrived on first test:** the email-send code path was already wired in [src/app/api/webhooks/stripe/route.ts](src/app/api/webhooks/stripe/route.ts) and the webhook returned 200 OK, but `getResend()` throws when `RESEND_API_KEY` is unset, and that throw is swallowed by the surrounding try/catch — silent failure. Adding the secret in Cloudflare and redeploying fixed it.
+- **Cloudflare deploy method:** project uses CLI deploy (`npm run pages:deploy` → `next-on-pages` → `wrangler pages deploy`), not Git auto-deploy. Pushing to GitHub alone does **not** trigger a new build. Empty commits also do not help; must run the deploy script after env var changes.
+- **Order ID format:** chose `LBH-${session.id.slice(-8).toUpperCase()}` (e.g. `LBH-OTDG52UE`) over Stripe's payment_intent ID. Reasoning — customers actually read this; full Stripe IDs are noisy. Collision risk on last-8-chars is negligible at our volume, and the full session.id is still recoverable from Stripe webhook logs when looking up an order from a support email.
+- **Domain verification path:** Resend detected the Cloudflare-managed domain and offered a one-click "Auto configure" → opens a Cloudflare authorization screen, then writes all 3 DNS records with proxy status set to "DNS only" (gray cloud) automatically. Records propagated and verified within a few minutes. Manual fallback: add the same 3 records under Cloudflare → DNS → Records, all with gray cloud (the orange-cloud proxy breaks email auth).
+- **From-address restriction lifted only after domain verification:** while `RESEND_FROM_EMAIL=Lady Bookhouse <onboarding@resend.dev>`, Resend silently drops mail to anyone other than the Resend account owner — useful for self-test, useless for real customers. Switching to `orders@theladybookhouse.com` after the domain is verified removes that restriction.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -254,3 +275,4 @@
 | 2026-04-08 | 9 | Cloudflare Pages deploy config complete. wrangler.toml, pages:build/dev/deploy scripts, edge runtime on books API routes, featured books refactored to remove fs dependency. |
 | 2026-04-10 | 10 | Final Polish complete. Fixed dev server (empty .env.local caused NextAuth crash). SEO: sitemap.ts, robots.ts, metadataBase + OG in root layout, per-page metadata on all routes, generateMetadata on book detail. Error handling: not-found.tsx (custom 404), error.tsx (global boundary), improved catalog fetch error with Retry button. Performance: next/image in BookCard + detail page, three loading.tsx skeletons (homepage, catalog, detail), next.config image remotePatterns. Accessibility: skip-to-content link, aria-hidden on decorative icons, aria-expanded + aria-controls on mobile menu. README replaced with full project docs. |
 | 2026-04-30 | 11 | Checkout fixes & branded order emails. Stripe Checkout now charges book subtotal + shipping (added `shipping_options` rate to session, free over $35 else $4.99). Cleared corrupted `.next` cache to fix unstyled-homepage rendering. Added Resend integration: new `src/lib/email.ts` with branded HTML template; webhook fetches line items and sends "Order Confirmed · Lady Bookhouse" email after `checkout.session.completed`. Skipped Stripe's built-in receipts (sandbox blocks delivery to non-team emails). Added `RESEND_API_KEY` / `RESEND_FROM_EMAIL` to env example. |
+| 2026-05-02 | 12 | Email delivery in production unblocked. Added `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to Cloudflare Pages env (root cause of first-test silent failure — webhook 200'd but `getResend()` threw inside the silent try/catch). Redeployed via `npm run pages:deploy` (project uses CLI deploy, not Git auto-deploy). Replaced raw Stripe session ID with friendlier `LBH-XXXXXXXX` code in both the confirmation email and `/order-confirmation` page. Verified `theladybookhouse.com` in Resend via Cloudflare auto-configure (DKIM/SPF/MX all green, DNS-only proxy). Pending: switch `RESEND_FROM_EMAIL` to `orders@theladybookhouse.com`, redeploy, end-to-end test with a non-self customer email. |
