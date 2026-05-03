@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendContactEmail } from "@/lib/email";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 type ContactPayload = {
   name?: string;
