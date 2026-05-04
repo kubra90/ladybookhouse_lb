@@ -260,6 +260,45 @@
 
 ---
 
+## Phase 13 — Contact Form Wiring & Stripe Live-Mode Discovery 🚧
+**Started:** 2026-05-03
+
+### Cloudflare Email Routing for `info@theladybookhouse.com`
+- [x] Enable Email Routing on `theladybookhouse.com` (Cloudflare auto-added MX + SPF DNS records)
+- [x] Add and verify destination address (Gmail) via Cloudflare's verification email
+- [x] Create custom-address routing rule: `info@theladybookhouse.com` → verified Gmail
+- [x] End-to-end verified: real email sent from a different account arrived in destination inbox (Forwarded: 1, Delivery failed: 0 in dashboard analytics)
+
+### Contact form wired up (`/api/contact`)
+- [x] Diagnosed why messages from the contact page weren't arriving — the form was a placebo: `await new Promise(r => setTimeout(r, 1000))` followed by a success toast, no API call
+- [x] New `sendContactEmail()` helper in `src/lib/email.ts` with branded HTML template (separate from order email styling)
+- [x] New `POST /api/contact` route — validates name/email/subject/message, length-caps inputs, returns 400/500 with user-friendly messages
+- [x] Honeypot field (`website` — visually-hidden absolute-positioned input). Submissions with non-empty honeypot return `{ ok: true }` silently without sending
+- [x] `Reply-To` header set to visitor's email so clicking Reply in Gmail addresses the response to the visitor, not the verified `From` domain
+- [x] Replaced fake `setTimeout` in `contact-client.tsx` with a real `fetch('/api/contact', ...)` call; failure path shows a destructive-variant toast with the API error message
+- [x] Added `CONTACT_FROM_EMAIL` and `CONTACT_TO_EMAIL` to `wrangler.toml` `[vars]` section (plaintext, not secrets — they're not sensitive)
+
+### Production incident — site outage from wrong runtime
+- [x] **Root cause:** `/api/contact/route.ts` was created with `export const runtime = "nodejs"`. Cloudflare Pages with `@cloudflare/next-on-pages` requires every route to use `runtime = "edge"`. The deploy produced a broken worker that 500'd on book detail pages (and likely others).
+- [x] Fix: change `runtime` to `"edge"` (commit `99c2345`). Resend SDK works on Edge runtime, so no behavior change for the contact form.
+- [x] Local verification: `npx @cloudflare/next-on-pages` build now succeeds; `/api/contact` appears alongside the other Edge functions. Pushed to main; auto-deploy picked it up.
+
+### Stripe live mode — discovered current account is a Jotform-managed sandbox
+- [ ] User's only Stripe workspace under `ladybookhouse@gmail.com` is a **sandbox** linked to Jotform (form-builder service). Sandboxes can never accept real money — no Live mode toggle, no bank info, no `sk_live_…` keys.
+- [ ] Two visible exit paths: (a) click **"Transition account"** on the banner that appeared after Jotform was disconnected, to convert the sandbox-style account into a fully-owned standalone Stripe account; or (b) start fresh at `https://dashboard.stripe.com/register`. (a) is preferred — same account ID, just user-owned.
+- [ ] Either path requires: business type & details (legal name, address, EIN/SSN), personal info (DOB, last 4 SSN), bank routing/account numbers for payouts, ID upload (driver's license or passport).
+- [ ] Pending until user completes activation: swap `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` from `sk_test_…`/`pk_test_…` to `sk_live_…`/`pk_live_…` in Cloudflare Pages secrets, create a live-mode webhook endpoint pointing at `/api/webhooks/stripe`, update `STRIPE_WEBHOOK_SECRET`.
+
+**Notes:**
+- **Cloudflare env-var split for this project:** plaintext non-sensitive vars (URLs, email addresses) live in `wrangler.toml` under `[vars]` — checked into git. Sensitive secrets (API keys, passwords) live in the Cloudflare dashboard → **Variables and Secrets**, marked **Secret**. The Cloudflare UI banner explicitly says: "Environment variables for this project are being managed through wrangler.toml. Only Secrets (encrypted variables) can be managed via the Dashboard." So adding plaintext vars via the dashboard form is blocked by design — they must go in the toml.
+- **Why Resend reactivation is still the gating factor for the contact form:** even with all the wiring shipped, the API call returns 500 until Resend reactivates. The form now shows a real error toast on failure (better than the previous fake-success behavior). Once Resend is back, the form starts delivering with no further code change.
+- **Lesson learned on runtime mismatch:** every other route in the project already used `runtime = "edge"`. Should have grepped `export const runtime` before writing the new route — would have caught the inconsistency before push. Adding to mental checklist for any new API route in this repo.
+- **Why the dev preview didn't catch the runtime issue:** local `npm run dev` uses the regular Next.js dev server which happily runs `nodejs` runtime routes. The mismatch only surfaces during the Cloudflare-specific build. Local verification step going forward should be `npx @cloudflare/next-on-pages` for any new route, not just `next build`.
+- **Cloudflare Pages deployment pattern reminder:** this project has Git auto-deploy enabled (push to `main` triggers Cloudflare build), unlike Phase 12 which noted CLI-only deploys. The `99c2345` fix push triggered an auto-deploy that recovered the site within a few minutes.
+- **Jotform sandbox origin:** at some point earlier the user signed up for Jotform (a form-builder), which uses Stripe Connect to provision sub-accounts for its users. Disconnecting Jotform left the account orphaned in sandbox mode with a "Transition account" banner offering to convert it. The "Thanks for activating your account!" page that appears in this state is misleading — it's celebrating sandbox setup, not real-account activation.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -276,3 +315,4 @@
 | 2026-04-10 | 10 | Final Polish complete. Fixed dev server (empty .env.local caused NextAuth crash). SEO: sitemap.ts, robots.ts, metadataBase + OG in root layout, per-page metadata on all routes, generateMetadata on book detail. Error handling: not-found.tsx (custom 404), error.tsx (global boundary), improved catalog fetch error with Retry button. Performance: next/image in BookCard + detail page, three loading.tsx skeletons (homepage, catalog, detail), next.config image remotePatterns. Accessibility: skip-to-content link, aria-hidden on decorative icons, aria-expanded + aria-controls on mobile menu. README replaced with full project docs. |
 | 2026-04-30 | 11 | Checkout fixes & branded order emails. Stripe Checkout now charges book subtotal + shipping (added `shipping_options` rate to session, free over $35 else $4.99). Cleared corrupted `.next` cache to fix unstyled-homepage rendering. Added Resend integration: new `src/lib/email.ts` with branded HTML template; webhook fetches line items and sends "Order Confirmed · Lady Bookhouse" email after `checkout.session.completed`. Skipped Stripe's built-in receipts (sandbox blocks delivery to non-team emails). Added `RESEND_API_KEY` / `RESEND_FROM_EMAIL` to env example. |
 | 2026-05-02 | 12 | Email delivery in production unblocked. Added `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to Cloudflare Pages env (root cause of first-test silent failure — webhook 200'd but `getResend()` threw inside the silent try/catch). Redeployed via `npm run pages:deploy` (project uses CLI deploy, not Git auto-deploy). Replaced raw Stripe session ID with friendlier `LBH-XXXXXXXX` code in both the confirmation email and `/order-confirmation` page. Verified `theladybookhouse.com` in Resend via Cloudflare auto-configure (DKIM/SPF/MX all green, DNS-only proxy). Pending: switch `RESEND_FROM_EMAIL` to `orders@theladybookhouse.com`, redeploy, end-to-end test with a non-self customer email. |
+| 2026-05-03 | 13 | Cloudflare Email Routing for `info@theladybookhouse.com` enabled and verified end-to-end (test email forwarded to Gmail). Contact form wired up: new `sendContactEmail()` helper, `POST /api/contact` route with validation + honeypot + `Reply-To` header, replaced placebo `setTimeout` in `contact-client.tsx` with real fetch + destructive-variant error toast. Added `CONTACT_FROM_EMAIL` / `CONTACT_TO_EMAIL` to `wrangler.toml` `[vars]`. **Production incident:** initial `/api/contact` route shipped with `runtime = "nodejs"`, breaking the Cloudflare Pages build and 500'ing book detail pages; fixed by changing to `runtime = "edge"` (commit `99c2345`) — site recovered after auto-deploy. **Stripe live mode blocked:** discovered the current `ladybookhouse@gmail.com` Stripe workspace is a Jotform-managed sandbox, not a real account; user must click **"Transition account"** banner or register fresh at `dashboard.stripe.com/register` and complete business/bank/ID verification before live keys are available. Contact-form code is fully shipped but won't deliver mail until Resend reactivates. |
