@@ -10,6 +10,7 @@ export interface Book {
   category: string;
   quantity: number;
   isAvailable: boolean;
+  listedDate?: string;
 }
 
 export interface CartItem {

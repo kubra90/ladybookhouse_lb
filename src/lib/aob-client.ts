@@ -28,6 +28,7 @@ interface AoBItem {
   qty: string | null;      // "0" = sold, "1"+ = in stock
   media: string | null;
   publisher: string | null;
+  listed_date: string | null;
 }
 
 interface AoBResponse {
@@ -146,6 +147,7 @@ function mapItem(item: AoBItem): Book {
     category: normalizeCategory(item.z_browse || item.z_category),
     quantity: qty,
     isAvailable: qty > 0,
+    listedDate: item.listed_date || undefined,
   };
 }
 

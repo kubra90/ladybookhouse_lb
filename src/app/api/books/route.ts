@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
 
   // Sort
   switch (sort) {
+    case "newest":
+      books.sort((a, b) => {
+        const aTime = a.listedDate ? Date.parse(a.listedDate) : 0;
+        const bTime = b.listedDate ? Date.parse(b.listedDate) : 0;
+        return bTime - aTime;
+      });
+      break;
     case "title-az":
       books.sort((a, b) => a.title.localeCompare(b.title));
       break;
