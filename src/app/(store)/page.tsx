@@ -13,18 +13,6 @@ export const metadata: Metadata = {
     "Welcome to Lady Bookhouse — a small, independent bookshop with a big heart. Browse our curated selection of fiction, non-fiction, and more.",
 };
 
-// Pick one book with a cover image from each genre
-const TARGET_CATEGORIES = [
-  "Fiction & Literature",
-  "Bestseller",
-  "History & Memory",
-  "Religion & Philosophy",
-  "Social Science",
-  "Science",
-  "Self-Help",
-  "Psychology",
-];
-
 async function getFeaturedBooks(): Promise<Book[]> {
   let allBooks: Book[];
   try {
@@ -35,21 +23,27 @@ async function getFeaturedBooks(): Promise<Book[]> {
     allBooks = [...placeholderBooks];
   }
 
+  const eligible = allBooks
+    .filter((b) => b.imageUrl && b.price > 10)
+    .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""));
+
   const featured: Book[] = [];
-  for (const cat of TARGET_CATEGORIES) {
-    const book = allBooks.find(
-      (b) => b.category === cat && b.imageUrl && b.price > 10 && !featured.some((f) => f.id === b.id)
-    );
-    if (book) featured.push(book);
+  const seenCategories = new Set<string>();
+  for (const book of eligible) {
+    const cat = book.category || "_uncategorized";
+    if (seenCategories.has(cat)) continue;
+    seenCategories.add(cat);
+    featured.push(book);
     if (featured.length >= 8) break;
   }
 
-  // Fill gaps with any book that has a cover image and price > $10
-  if (featured.length < 4) {
-    const extras = allBooks.filter(
-      (b) => b.imageUrl && b.price > 10 && !featured.some((f) => f.id === b.id)
-    );
-    featured.push(...extras.slice(0, 8 - featured.length));
+  // If there aren't 8 distinct genres, fill with the next-newest books.
+  if (featured.length < 8) {
+    for (const book of eligible) {
+      if (featured.some((f) => f.id === book.id)) continue;
+      featured.push(book);
+      if (featured.length >= 8) break;
+    }
   }
 
   return featured.slice(0, 8);
