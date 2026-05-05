@@ -13,6 +13,9 @@ export const metadata: Metadata = {
     "Welcome to Lady Bookhouse — a small, independent bookshop with a big heart. Browse our curated selection of fiction, non-fiction, and more.",
 };
 
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
+
 async function getFeaturedBooks(): Promise<Book[]> {
   let allBooks: Book[];
   try {
