@@ -9,7 +9,7 @@
     "lint": "next lint",
     "pages:build": "npx @cloudflare/next-on-pages",
     "pages:dev": "npx wrangler pages dev .vercel/output/static --compatibility-flag=nodejs_compat",
-    "pages:deploy": "npm run pages:build && npx wrangler pages deploy .vercel/output/static --project-name=lady-bookhouse"
+    "pages:deploy": "rm -rf .next .vercel/output && npm run pages:build && npx wrangler pages deploy .vercel/output/static --project-name=lady-bookhouse --branch=main"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
