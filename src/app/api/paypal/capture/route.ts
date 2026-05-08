@@ -100,10 +100,11 @@ export async function POST(request: Request) {
 
     const captured = await capturePayPalOrder(orderId);
 
-    // Side effects (markSold + email) run in the background. We don't await
-    // them — the customer's payment is already captured, so the client should
-    // see the success page as soon as possible. Failures are logged.
-    runSideEffects(orderId).catch((err) =>
+    // Await side effects so they actually run on Cloudflare Workers — fire-and-forget
+    // gets killed when the Response returns. The client is already on a loading
+    // spinner, so the extra ~1s is fine. Errors are caught so a failed email
+    // doesn't break the customer's confirmation page.
+    await runSideEffects(orderId).catch((err) =>
       console.error("Order side effects failed:", err)
     );
 
