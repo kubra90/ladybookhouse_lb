@@ -299,6 +299,65 @@
 
 ---
 
+## Phase 14 — PayPal Checkout (Stripe Replacement) ✅
+**Completed:** 2026-05-07
+
+### Context
+Stripe live mode was blocked (Phase 13 — Jotform-managed sandbox couldn't be transitioned). Rather than wait, swapped to PayPal as the primary payment provider. Stripe code was kept untouched for future revival once Stripe activation completes.
+
+### UX shape chosen — Option A (redirect)
+Mirrors the existing Stripe flow: cart "Proceed to Checkout" button → redirect to PayPal-hosted page → return to `/order-confirmation`. Smallest possible diff to the cart UI; future option B (embedded Smart Buttons) or C (Stripe + PayPal side-by-side) can layer on top without rewriting the backend.
+
+### Implementation
+- [x] **New** `src/lib/paypal.ts` — edge-runtime-compatible PayPal client using `fetch` only (no SDK; PayPal's official SDK has Node-only deps that break edge). Exports `getPayPalAccessToken`, `createPayPalOrder`, `capturePayPalOrder`, `getPayPalOrder`, `paypalBaseUrl`. Sandbox/live base URL switched via `PAYPAL_ENVIRONMENT` env var. Uses `btoa()` for Basic Auth header.
+- [x] **Modified** `src/app/api/checkout/route.ts` — replaced Stripe Checkout Session creation with PayPal Orders API (`POST /v2/checkout/orders`). Returns `{ url: <approve-link> }` in the same response shape so the existing cart UI keeps working without changes. `application_context` sets `brand_name: "Lady Bookhouse"`, `shipping_preference: "GET_FROM_FILE"`, `user_action: "PAY_NOW"`, plus `return_url`/`cancel_url` derived from the request origin. Each line item carries the AoB book ID in `items[].sku` for inventory lookup at capture time.
+- [x] **New** `src/app/api/paypal/capture/route.ts` — receives the PayPal order ID returned to `/order-confirmation?token=...`, captures the payment, then runs side effects (mark books sold in AoB, send Resend confirmation email).
+- [x] **Modified** `src/app/(store)/order-confirmation/order-confirmation-client.tsx` — when PayPal redirects back with `?token=<orderId>`, calls `POST /api/paypal/capture`. Three states: `loading` (with spinner + reassuring copy), `success` (existing thank-you screen), `error` (apologetic copy + Contact / Return-to-cart buttons). `useRef`-guarded so React Strict Mode double-mount in dev doesn't fire two captures.
+- [x] **Stripe untouched** — `src/lib/stripe.ts`, `src/app/api/webhooks/stripe/route.ts` left intact. Stripe checkout creation was the only file replaced. Re-enabling Stripe later means swapping the body of `/api/checkout` back, no other rework.
+
+### Env vars added to `.env.local.example`
+```
+PAYPAL_CLIENT_ID=...
+PAYPAL_CLIENT_SECRET=...
+NEXT_PUBLIC_PAYPAL_CLIENT_ID=...   # same value as PAYPAL_CLIENT_ID; reserved for future Smart Buttons (option B)
+PAYPAL_ENVIRONMENT=sandbox         # "sandbox" or "live"
+PAYPAL_WEBHOOK_ID=...              # only needed once webhooks are wired up
+TEST_ORDER_EMAIL=...               # see "TEST_ORDER_EMAIL override" below
+```
+
+### Three issues hit during sandbox testing (and their fixes)
+1. **Confirmation email had `$0.00` and no line items.** Root cause: PayPal's **capture response** strips `items` and `amount.breakdown` from `purchase_units` — only the original order has them. Fix: after capturing, re-fetch via `getPayPalOrder(orderId)` to get the full purchase_units back. Items, totals, and shipping breakdown then render correctly.
+2. **Order-confirmation page stuck on "Confirming your order…" for ~22s, then UI showed error even though email had already arrived.** Root cause: route did all side effects sequentially before returning (`capture` → `getPayPalOrder` → `markSold` per book → `sendOrderConfirmationEmail`). The 22-second response either exceeded the browser's patience or the user navigated away. Fix in two passes:
+   - First pass: parallelize side effects with `Promise.all` and individual `.catch` so failures are logged not surfaced. Cut total time roughly in half.
+   - Second pass (final): split into `runSideEffects(orderId)` helper called **without `await`** after the capture completes. Response returns immediately after capture (~3-5s); `markSold` and email run as fire-and-forget with their own error logging. Dev test confirmed: success page renders quickly, email arrives a few seconds later. **Caveat for production** — see notes below.
+3. **Sandbox payer email (`sb-xxxxxxx@personal.example.com`) is fake and never receives real mail**, so end-to-end email testing was impossible. Fix: added a `TEST_ORDER_EMAIL` env var. When `PAYPAL_ENVIRONMENT !== "live"` AND `TEST_ORDER_EMAIL` is set, the capture route sends the confirmation there instead of the payer's fake address. In live mode the override is ignored, even if the env var is accidentally still set in Cloudflare. Resend's `onboarding@resend.dev` sender restriction means `TEST_ORDER_EMAIL` must match the email on the Resend account (currently `ladybookhouse@gmail.com`) — once the verified `theladybookhouse.com` sender is switched in (Phase 12 pending), that restriction lifts.
+
+### Sandbox testing flow (for future reference)
+1. Sandbox accounts live at `developer.paypal.com/dashboard/accounts` (toggle Sandbox/Live at top-left of dashboard). PayPal auto-creates one **Business** and one **Personal** account per developer signup.
+2. The Personal account's email/password (visible via `⋮` → **View/edit account**) is what you use on the sandbox checkout login screen — your real PayPal email won't authenticate there.
+3. Personal accounts ship with $5,000 fake balance + a sandbox-issued Visa under **Funding**, both selectable on the Pay With screen.
+4. Stripe-style test cards (e.g. `4242 4242 4242 4242`) do **not** work in PayPal sandbox — PayPal sandbox cards are issued per personal account, viewable on that account's funding panel.
+
+### Pending — production deployment
+- [ ] Switch `PAYPAL_ENVIRONMENT` to `live` in Cloudflare Pages env after creating a Live app at `developer.paypal.com` (the Sandbox app from setup doesn't carry over).
+- [ ] Add the **Live** Client ID + Secret to Cloudflare → **Variables and Secrets** (mark Secret as encrypted; Client ID can be plaintext).
+- [ ] Leave `TEST_ORDER_EMAIL` unset in Cloudflare so live confirmation emails go to the real customer's PayPal email.
+- [ ] Decide on the fire-and-forget reliability question (see notes below) before relying on the email + `markSold` path in production.
+
+### Worktree quirk worth remembering
+- This phase was developed in a Claude worktree at `.claude/worktrees/wonderful-proskuriakova-3367c2/`. Worktrees don't inherit the main repo's `.env.local`, so the dev server initially read no PayPal vars and returned 500. Resolved by symlinking: `ln -s /Users/kubra/Desktop/LadyBookHouse/.env.local .env.local`. Symlink is gitignored (path is gitignored, not specifically the symlink) so it stays out of commits.
+
+### Notes
+- **`NEXT_PUBLIC_PAYPAL_CLIENT_ID` exists but is unused in option A.** It's only needed if/when we add the embedded `@paypal/react-paypal-js` Smart Buttons (option B). Kept in `.env.local.example` so the var is ready when needed; the value is the same as `PAYPAL_CLIENT_ID`. The Client ID is public-safe (it's visible in the rendered button anyway); only the **Secret** must stay server-side.
+- **Why `getPayPalOrder` after `capturePayPalOrder` instead of just trusting the capture response.** PayPal's `POST /v2/checkout/orders/{id}/capture` response only echoes `purchase_units[].shipping` and `purchase_units[].payments.captures[]`. The original `items[]` and `amount.breakdown` are gone. A `GET /v2/checkout/orders/{id}` after capture brings everything back. This is one extra round-trip but it's cheap (~1s) and keeps the email template happy.
+- **`ORDER_ALREADY_CAPTURED` is treated as success.** `capturePayPalOrder` in `paypal.ts` catches this specific PayPal error code and falls back to `getPayPalOrder` instead of throwing. Lets the client retry safely if the page is reloaded mid-flow without double-charging or surfacing an error to the user.
+- **Fire-and-forget reliability in Cloudflare edge runtime.** The current `runSideEffects(orderId).catch(...)` (no `await`) works perfectly in `npm run dev` (Node keeps the promise alive until it resolves). On Cloudflare Pages edge runtime, the Worker may be terminated immediately after the response is sent, killing in-flight email/AoB calls. Two future-proof options when this becomes a problem: (a) use Cloudflare's `event.waitUntil` (`@cloudflare/next-on-pages` exposes `getRequestContext().waitUntil`) to keep the worker alive; or (b) move side effects into a **PayPal webhook** (`POST /api/webhooks/paypal`) registered for `PAYMENT.CAPTURE.COMPLETED`, which is how Stripe's flow already works. Option (b) is the cleaner long-term answer — it decouples the customer's response time from any side-effect latency entirely. `PAYPAL_WEBHOOK_ID` is already in the env example for when this is wired up.
+- **AoB `markSold` slowness was the dominant blocker.** Capture itself is ~3-5s on PayPal sandbox. The 22-second total was mostly `markSold` calls hitting the AoB API serially. Even after parallelizing with `Promise.all`, the slowest book's `markSold` round-trip still dominates. Fire-and-forget sidesteps this entirely from the user's perspective.
+- **Sandbox vs Live isolation.** Real PayPal credentials don't authenticate on `sandbox.paypal.com` and sandbox credentials don't authenticate on `paypal.com`. Worth telling the user explicitly when they ask "can I test with my real email" — they can't, by design.
+- **Stripe code retained for revival.** Once Stripe live mode is unblocked (Phase 13 pending), the path is: keep the PayPal route as-is, restore `getStripe().checkout.sessions.create(...)` in `/api/checkout` behind a feature flag or a UI toggle. The Stripe webhook + email handler at `/api/webhooks/stripe/route.ts` is unchanged and will work the moment Stripe traffic flows through it again. Phase 14 specifically did **not** delete any Stripe code.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -316,3 +375,4 @@
 | 2026-04-30 | 11 | Checkout fixes & branded order emails. Stripe Checkout now charges book subtotal + shipping (added `shipping_options` rate to session, free over $35 else $4.99). Cleared corrupted `.next` cache to fix unstyled-homepage rendering. Added Resend integration: new `src/lib/email.ts` with branded HTML template; webhook fetches line items and sends "Order Confirmed · Lady Bookhouse" email after `checkout.session.completed`. Skipped Stripe's built-in receipts (sandbox blocks delivery to non-team emails). Added `RESEND_API_KEY` / `RESEND_FROM_EMAIL` to env example. |
 | 2026-05-02 | 12 | Email delivery in production unblocked. Added `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to Cloudflare Pages env (root cause of first-test silent failure — webhook 200'd but `getResend()` threw inside the silent try/catch). Redeployed via `npm run pages:deploy` (project uses CLI deploy, not Git auto-deploy). Replaced raw Stripe session ID with friendlier `LBH-XXXXXXXX` code in both the confirmation email and `/order-confirmation` page. Verified `theladybookhouse.com` in Resend via Cloudflare auto-configure (DKIM/SPF/MX all green, DNS-only proxy). Pending: switch `RESEND_FROM_EMAIL` to `orders@theladybookhouse.com`, redeploy, end-to-end test with a non-self customer email. |
 | 2026-05-03 | 13 | Cloudflare Email Routing for `info@theladybookhouse.com` enabled and verified end-to-end (test email forwarded to Gmail). Contact form wired up: new `sendContactEmail()` helper, `POST /api/contact` route with validation + honeypot + `Reply-To` header, replaced placebo `setTimeout` in `contact-client.tsx` with real fetch + destructive-variant error toast. Added `CONTACT_FROM_EMAIL` / `CONTACT_TO_EMAIL` to `wrangler.toml` `[vars]`. **Production incident:** initial `/api/contact` route shipped with `runtime = "nodejs"`, breaking the Cloudflare Pages build and 500'ing book detail pages; fixed by changing to `runtime = "edge"` (commit `99c2345`) — site recovered after auto-deploy. **Stripe live mode blocked:** discovered the current `ladybookhouse@gmail.com` Stripe workspace is a Jotform-managed sandbox, not a real account; user must click **"Transition account"** banner or register fresh at `dashboard.stripe.com/register` and complete business/bank/ID verification before live keys are available. Contact-form code is fully shipped but won't deliver mail until Resend reactivates. |
+| 2026-05-07 | 14 | PayPal checkout shipped as Stripe replacement (Stripe live mode still blocked). Option A — redirect flow mirroring existing Stripe UX. New `src/lib/paypal.ts` (edge-compatible `fetch`-only client; no SDK), replaced `/api/checkout` body to create PayPal Orders, new `/api/paypal/capture` route, updated `/order-confirmation` client to capture on `?token=...` with loading/success/error states. Stripe code untouched for future revival. Sandbox testing via auto-generated `sb-...@personal.example.com` (real email won't authenticate on sandbox.paypal.com). Three issues hit and fixed: (1) capture response strips `items`/`breakdown` → re-fetch via `getPayPalOrder` after capture; (2) 22-second blocking response → moved side effects to fire-and-forget after capture, response now ~3-5s; (3) sandbox payer email is fake → added `TEST_ORDER_EMAIL` override (sandbox-only, ignored in live). Pending production: create Live PayPal app, add Live keys to Cloudflare, decide between `waitUntil` or PayPal webhook for production-grade side-effect reliability (current fire-and-forget may be killed by Cloudflare worker termination after response). |
