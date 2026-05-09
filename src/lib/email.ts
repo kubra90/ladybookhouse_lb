@@ -21,6 +21,7 @@ export type OrderEmailItem = {
 
 export type OrderEmailParams = {
   to: string;
+  bcc?: string | string[];
   customerName?: string | null;
   orderId: string;
   items: OrderEmailItem[];
@@ -151,6 +152,7 @@ export async function sendOrderConfirmationEmail(params: OrderEmailParams) {
   const result = await getResend().emails.send({
     from: FROM,
     to: params.to,
+    ...(params.bcc ? { bcc: params.bcc } : {}),
     subject,
     html,
   });
