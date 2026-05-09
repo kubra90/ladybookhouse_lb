@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { markSold, isConfigured } from "@/lib/aob-client";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import Stripe from "stripe";
 
@@ -43,11 +42,6 @@ export async function POST(request: Request) {
       amountTotal: session.amount_total,
       bookIds: session.metadata?.bookIds,
     });
-
-    if (isConfigured() && session.metadata?.bookIds) {
-      const bookIds = session.metadata.bookIds.split(",");
-      await Promise.all(bookIds.map((id) => markSold(id.trim())));
-    }
 
     const customerEmail = session.customer_details?.email;
     if (customerEmail && process.env.RESEND_API_KEY) {

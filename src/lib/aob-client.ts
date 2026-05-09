@@ -199,12 +199,3 @@ export async function fetchBook(id: string): Promise<Book | null> {
   }
 }
 
-export async function markSold(bookId: string): Promise<boolean> {
-  try {
-    await aobFetch(`/item/${bookId}/sold`);
-    return true;
-  } catch (error) {
-    console.error(`Failed to mark book ${bookId} as sold:`, error);
-    return false;
-  }
-}
