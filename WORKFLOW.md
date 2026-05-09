@@ -358,6 +358,57 @@ TEST_ORDER_EMAIL=...               # see "TEST_ORDER_EMAIL override" below
 
 ---
 
+## Phase 15 — Manual AoB Inventory Workflow & Seller Order Notifications 🚧
+**Started:** 2026-05-08
+
+### Context
+Email-arrival fix from prior session (commit `a30f70c` — `await runSideEffects`) confirmed working in production after `TEST_ORDER_EMAIL` was added to Cloudflare Pages env vars and the project redeployed. From the pre-launch checklist, that ticked off "Order email arrives" — and surfaced the next two questions: how does the seller know about a sale, and how do sold books leave the AoB inventory.
+
+### Decision: manual AoB inventory removal for early launch
+- AoB has **no public mark-as-sold endpoint**. The existing `markSold(bookId)` helper at `src/lib/aob-client.ts` was hitting `/item/{id}/sold`, which doesn't exist; the call had been silently failing inside its own `try/catch` since Phase 6.
+- Volume is expected to be very low in the first months. User will manually delete sold books from the AoB inventory dashboard after each sale rather than waiting for an API endpoint that may never ship.
+- Trigger for the manual step: the order confirmation email — provided it includes the SKU so the right AoB record is easy to find.
+
+### PR #2 — Show SKU in order email, remove dead `markSold` (merged 2026-05-08)
+- [x] Added optional `sku?: string` to `OrderEmailItem` type in `src/lib/email.ts`; renders as small gray `SKU: <sku>` line under the title in the HTML template.
+- [x] PayPal capture route (`src/app/api/paypal/capture/route.ts`) now passes `sku: i.sku || undefined` per line item.
+- [x] Deleted `markSold` function from `src/lib/aob-client.ts`.
+- [x] Removed `markSold` import + call site from PayPal capture route.
+- [x] Removed `markSold` import + call site from the legacy Stripe webhook (`src/app/api/webhooks/stripe/route.ts`) so the function could be deleted cleanly. Stripe webhook otherwise untouched — still dead code awaiting Stripe live-mode unblock from Phase 13.
+- [x] Verified live: sandbox PayPal purchase produced confirmation email with `SKU: PHL03690` / `SKU: FL03693` rendered under each book title.
+
+### PR #3 — BCC seller on order confirmation (merged 2026-05-09)
+- [x] Added optional `bcc?: string | string[]` to `OrderEmailParams`; forwarded to Resend via spread when present.
+- [x] PayPal capture route now computes `sellerEmail = process.env.SELLER_NOTIFICATION_EMAIL || "info@theladybookhouse.com"` and BCCs the seller on every order confirmation.
+- [x] **Skip-if-same guard:** if `sellerEmail === customerEmail`, BCC is omitted. Avoids duplicate inbox copies during sandbox testing where `TEST_ORDER_EMAIL` is the seller's own inbox.
+
+### Sandbox-only "missing BCC" — diagnosis (no fix needed)
+- Symptom: after a sandbox purchase, only one email appeared in `ladybookhouse@gmail.com`. Resend dashboard showed `BCC: info@theladybookhouse.com` was actually included — confirming the code worked.
+- Root cause: in the user's setup, `info@theladybookhouse.com` is a Cloudflare Email Routing address that forwards to the same `ladybookhouse@gmail.com` inbox (set up in Phase 13). Resend sends one email with TO + BCC, so both copies arrive at the same Gmail mailbox with the **same Message-ID**. Gmail collapses identical Message-IDs into one entry — by design on Gmail's side, not a code issue.
+- **Production behavior:** in live mode the customer's email and `info@theladybookhouse.com` will be different mailboxes entirely. No dedup possible — the BCC will land in the seller inbox normally.
+- **No code change needed.** Ship as-is and verify with a real $0.50–$1.00 live purchase from a different email address.
+
+### Pre-launch checklist progress
+- [x] **End-to-end happy path** (1 book → checkout → PayPal sandbox → /order-confirmation → order ID) — confirmed working previously.
+- [x] **Order email arrives** — confirmed working after prior session's `await runSideEffects` fix + `TEST_ORDER_EMAIL` env var on Cloudflare.
+- [x] **Book marked sold after purchase** — replaced by manual AoB deletion workflow (this phase). No longer a code-side concern.
+- [ ] Multi-item cart end-to-end.
+- [ ] Free shipping threshold ($35+) shown in PayPal.
+- [ ] Cancel flow returns to /cart with items intact.
+- [ ] Switch `PAYPAL_ENVIRONMENT` to `live` + Live `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` / `NEXT_PUBLIC_PAYPAL_CLIENT_ID` in Cloudflare. Delete `TEST_ORDER_EMAIL` so confirmation goes to real payer.
+- [ ] Confirm `RESEND_FROM_EMAIL` in Cloudflare is `Lady Bookhouse <orders@theladybookhouse.com>` (verified domain from Phase 12) — without this, real customers will not receive their confirmation email.
+- [ ] Real $0.50–$1.00 live purchase from a non-self email to verify both customer copy and seller BCC arrive.
+
+### Notes
+- **Why `info@theladybookhouse.com` as the seller default and not the user's gmail:** info@ is the public-facing brand address (also used for contact form replies, business correspondence). Hardcoding personal gmail in code would leak it into the repo. The default routes through Cloudflare Email Routing → Gmail anyway, so the user reads it in the same inbox without exposing the personal address.
+- **`SELLER_NOTIFICATION_EMAIL` env var as override:** lets the user redirect seller notifications to a different inbox (or disable them by setting it to the customer email's value, which trips the skip-if-same guard). Not required for normal operation — the default works.
+- **The BCC fix is a one-line behavioral choice, not a separate seller email.** Considered Option B (send a distinct seller-only email with action-oriented subject like "New order — N books to ship") but went with the smaller change first. If the BCC version proves noisy or hard to filter once real orders flow, the seller-specific email is easy to layer on top — same Resend integration, separate `sendOrderConfirmationEmail` call with different `to:` and `subject:`.
+- **`.env.local` vs Cloudflare for live PayPal switch:** keep `.env.local` on sandbox always. Live keys belong only in Cloudflare Pages → Production env vars. Reasoning: any local dev work that hits the checkout flow would otherwise charge real cards; live secrets on a developer laptop are also a wider surface area than necessary.
+- **Why the legacy Stripe webhook was touched in PR #2:** only to remove the `markSold` import so the helper could be deleted cleanly. The webhook still compiles and remains untouched otherwise — dead code preserved for the eventual Stripe live-mode revival from Phase 13. No behavior change to Stripe path.
+- **Verifying email-shaped changes:** dev server preview can't exercise the email send path (needs a real PayPal sandbox capture to fire `sendOrderConfirmationEmail`). Verification protocol going forward: ship → sandbox PayPal purchase → check Resend dashboard for the actual `to`/`bcc`/`subject` Resend received → check the destination inbox.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -376,3 +427,4 @@ TEST_ORDER_EMAIL=...               # see "TEST_ORDER_EMAIL override" below
 | 2026-05-02 | 12 | Email delivery in production unblocked. Added `RESEND_API_KEY` + `RESEND_FROM_EMAIL` to Cloudflare Pages env (root cause of first-test silent failure — webhook 200'd but `getResend()` threw inside the silent try/catch). Redeployed via `npm run pages:deploy` (project uses CLI deploy, not Git auto-deploy). Replaced raw Stripe session ID with friendlier `LBH-XXXXXXXX` code in both the confirmation email and `/order-confirmation` page. Verified `theladybookhouse.com` in Resend via Cloudflare auto-configure (DKIM/SPF/MX all green, DNS-only proxy). Pending: switch `RESEND_FROM_EMAIL` to `orders@theladybookhouse.com`, redeploy, end-to-end test with a non-self customer email. |
 | 2026-05-03 | 13 | Cloudflare Email Routing for `info@theladybookhouse.com` enabled and verified end-to-end (test email forwarded to Gmail). Contact form wired up: new `sendContactEmail()` helper, `POST /api/contact` route with validation + honeypot + `Reply-To` header, replaced placebo `setTimeout` in `contact-client.tsx` with real fetch + destructive-variant error toast. Added `CONTACT_FROM_EMAIL` / `CONTACT_TO_EMAIL` to `wrangler.toml` `[vars]`. **Production incident:** initial `/api/contact` route shipped with `runtime = "nodejs"`, breaking the Cloudflare Pages build and 500'ing book detail pages; fixed by changing to `runtime = "edge"` (commit `99c2345`) — site recovered after auto-deploy. **Stripe live mode blocked:** discovered the current `ladybookhouse@gmail.com` Stripe workspace is a Jotform-managed sandbox, not a real account; user must click **"Transition account"** banner or register fresh at `dashboard.stripe.com/register` and complete business/bank/ID verification before live keys are available. Contact-form code is fully shipped but won't deliver mail until Resend reactivates. |
 | 2026-05-07 | 14 | PayPal checkout shipped as Stripe replacement (Stripe live mode still blocked). Option A — redirect flow mirroring existing Stripe UX. New `src/lib/paypal.ts` (edge-compatible `fetch`-only client; no SDK), replaced `/api/checkout` body to create PayPal Orders, new `/api/paypal/capture` route, updated `/order-confirmation` client to capture on `?token=...` with loading/success/error states. Stripe code untouched for future revival. Sandbox testing via auto-generated `sb-...@personal.example.com` (real email won't authenticate on sandbox.paypal.com). Three issues hit and fixed: (1) capture response strips `items`/`breakdown` → re-fetch via `getPayPalOrder` after capture; (2) 22-second blocking response → moved side effects to fire-and-forget after capture, response now ~3-5s; (3) sandbox payer email is fake → added `TEST_ORDER_EMAIL` override (sandbox-only, ignored in live). Pending production: create Live PayPal app, add Live keys to Cloudflare, decide between `waitUntil` or PayPal webhook for production-grade side-effect reliability (current fire-and-forget may be killed by Cloudflare worker termination after response). |
+| 2026-05-08 | 15 | Manual AoB inventory workflow + seller order notifications. Confirmed prior session's `await runSideEffects` fix is working in production (email now arrives reliably). **Decision:** AoB has no mark-as-sold endpoint; for early launch the user will manually delete sold books from the AoB dashboard, triggered by the order confirmation email. **PR #2 (merged):** added SKU under each title in the order email so the user can find the right AoB record; deleted the dead `markSold` helper and its two call sites (PayPal capture + legacy Stripe webhook). **PR #3 (merged):** BCC the seller on every order confirmation. Defaults to `info@theladybookhouse.com` (Cloudflare Email Routing → Gmail), overridable via `SELLER_NOTIFICATION_EMAIL`, skips when BCC == TO to avoid sandbox dupes. **Sandbox-only "missing BCC" diagnosis:** Resend dashboard confirmed BCC was sent; Gmail merged TO + BCC into one entry because both ultimately route to the same inbox via Email Routing (same Message-ID dedup). Production won't dedup — customer email and `info@…` will be different mailboxes. No code change needed. **Pre-launch checklist:** end-to-end happy path, order email arrival, and "book marked sold" (replaced by manual workflow) all done. Remaining: multi-item cart, free-shipping threshold, cancel flow, switch to PayPal Live (Cloudflare env only — keep `.env.local` on sandbox), confirm `RESEND_FROM_EMAIL` is the verified domain sender, then a real $0.50–$1 live purchase from a non-self email to verify both copies arrive. |
