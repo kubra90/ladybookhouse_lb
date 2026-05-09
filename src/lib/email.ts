@@ -14,6 +14,7 @@ function getResend(): Resend {
 
 export type OrderEmailItem = {
   title: string;
+  sku?: string;
   quantity: number;
   amount: number;
 };
@@ -49,6 +50,7 @@ function buildOrderEmailHtml(p: OrderEmailParams): string {
         <tr>
           <td style="padding:12px 0;border-bottom:1px solid #eee;font-family:Georgia,serif;color:#3a2e1f;">
             ${escapeHtml(it.title)}${it.quantity > 1 ? ` × ${it.quantity}` : ""}
+            ${it.sku ? `<div style="font-size:12px;color:#9a8a75;margin-top:2px;">SKU: ${escapeHtml(it.sku)}</div>` : ""}
           </td>
           <td style="padding:12px 0;border-bottom:1px solid #eee;text-align:right;font-family:Georgia,serif;color:#3a2e1f;">
             ${formatMoney(it.amount)}

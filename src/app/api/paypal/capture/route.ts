@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { capturePayPalOrder, getPayPalOrder } from "@/lib/paypal";
-import { markSold, isConfigured } from "@/lib/aob-client";
 import { sendOrderConfirmationEmail } from "@/lib/email";
 
 export const runtime = "edge";
@@ -9,9 +8,6 @@ async function runSideEffects(orderId: string): Promise<void> {
   // Re-fetch the order — capture response strips items/breakdown
   const order = await getPayPalOrder(orderId);
   const unit = order.purchase_units?.[0];
-
-  const bookIds: string[] =
-    unit?.items?.map((i) => i.sku ?? "").filter(Boolean) ?? [];
 
   const payerEmail = order.payer?.email_address;
   const isSandbox = process.env.PAYPAL_ENVIRONMENT !== "live";
@@ -22,14 +18,6 @@ async function runSideEffects(orderId: string): Promise<void> {
 
   const tasks: Promise<unknown>[] = [];
 
-  if (isConfigured() && bookIds.length > 0) {
-    tasks.push(
-      Promise.all(bookIds.map((id) => markSold(id))).catch((err) =>
-        console.error("markSold failed:", err)
-      )
-    );
-  }
-
   if (customerEmail && process.env.RESEND_API_KEY) {
     const items =
       unit?.items?.map((i) => {
@@ -37,6 +25,7 @@ async function runSideEffects(orderId: string): Promise<void> {
         const unitDollars = parseFloat(i.unit_amount?.value ?? "0");
         return {
           title: i.name,
+          sku: i.sku || undefined,
           quantity: qty,
           amount: Math.round(unitDollars * qty * 100),
         };
