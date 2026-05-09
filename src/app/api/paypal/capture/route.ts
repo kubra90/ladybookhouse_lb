@@ -61,9 +61,18 @@ async function runSideEffects(orderId: string): Promise<void> {
         .join(" ") || null;
     const fullName = unit?.shipping?.name?.full_name ?? payerFullName;
 
+    // BCC the seller on the customer receipt so they can see new orders.
+    // Skip if it would just dupe the recipient (sandbox: TEST_ORDER_EMAIL is
+    // often the same inbox).
+    const sellerEmail =
+      process.env.SELLER_NOTIFICATION_EMAIL || "info@theladybookhouse.com";
+    const bcc =
+      sellerEmail && sellerEmail !== customerEmail ? sellerEmail : undefined;
+
     tasks.push(
       sendOrderConfirmationEmail({
         to: customerEmail,
+        bcc,
         customerName: fullName,
         orderId: `LBH-${order.id.slice(-8).toUpperCase()}`,
         items,
