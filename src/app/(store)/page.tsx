@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
-import { BookOpen, Heart, Package } from "lucide-react";
+import { BookOpen, Heart, Package, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import BookCard from "@/components/store/BookCard";
 import { fetchAllAvailableBooks, isConfigured } from "@/lib/aob-client";
+import { bookOfTheWeek } from "@/lib/book-of-the-week";
 import { placeholderBooks } from "@/lib/placeholder-books";
 import type { Book } from "@/types/book";
 
@@ -16,16 +19,17 @@ export const metadata: Metadata = {
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-async function getFeaturedBooks(): Promise<Book[]> {
-  let allBooks: Book[];
+async function getAllBooks(): Promise<Book[]> {
   try {
-    allBooks = isConfigured()
+    return isConfigured()
       ? await fetchAllAvailableBooks()
       : [...placeholderBooks];
   } catch {
-    allBooks = [...placeholderBooks];
+    return [...placeholderBooks];
   }
+}
 
+function getFeaturedBooks(allBooks: Book[]): Book[] {
   const eligible = allBooks
     .filter((b) => b.imageUrl && b.price > 10)
     .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""));
@@ -53,7 +57,11 @@ async function getFeaturedBooks(): Promise<Book[]> {
 }
 
 export default async function HomePage() {
-  const featuredBooks = await getFeaturedBooks();
+  const allBooks = await getAllBooks();
+  const featuredBooks = getFeaturedBooks(allBooks);
+  const featuredBook = bookOfTheWeek.bookId
+    ? allBooks.find((b) => b.id === bookOfTheWeek.bookId)
+    : undefined;
 
   return (
     <>
@@ -86,6 +94,70 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Book of the Week */}
+      {featuredBook && (
+        <section className="bg-warm-sand/50 border-y">
+          <div className="container py-16 md:py-20">
+            <div className="grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] md:gap-12">
+              <Link
+                href={`/books/${featuredBook.id}`}
+                className="group relative mx-auto block aspect-[3/4] w-full max-w-xs overflow-hidden rounded-lg border bg-card shadow-md transition-shadow hover:shadow-xl md:max-w-sm"
+              >
+                {featuredBook.imageUrl ? (
+                  <Image
+                    src={featuredBook.imageUrl}
+                    alt={`${featuredBook.title} cover`}
+                    fill
+                    sizes="(max-width: 768px) 80vw, 35vw"
+                    className="object-contain p-4 transition-transform group-hover:scale-105"
+                    priority
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center p-6">
+                    <span className="font-serif text-center text-muted-foreground leading-relaxed">
+                      {featuredBook.title}
+                    </span>
+                  </div>
+                )}
+              </Link>
+
+              <div className="space-y-5 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Book of the Week
+                </div>
+                <div className="space-y-2">
+                  <h2 className="font-heading text-3xl font-bold leading-tight md:text-4xl">
+                    {featuredBook.title}
+                  </h2>
+                  <p className="font-serif text-lg text-muted-foreground">
+                    by {featuredBook.author}
+                  </p>
+                </div>
+                <p className="font-serif text-base leading-relaxed text-foreground/80 md:text-lg">
+                  {bookOfTheWeek.blurb}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
+                  <span className="font-heading text-2xl font-semibold text-primary">
+                    ${featuredBook.price.toFixed(2)}
+                  </span>
+                  <Badge variant="outline" className="text-xs">
+                    {featuredBook.condition}
+                  </Badge>
+                </div>
+                <div className="pt-2">
+                  <Link href={`/books/${featuredBook.id}`}>
+                    <Button size="lg" className="font-medium">
+                      View this book
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Featured Books */}
       <section className="container py-16 md:py-20">
