@@ -213,3 +213,72 @@ export async function sendContactEmail(params: ContactEmailParams) {
   });
   return result;
 }
+
+export type NewsletterFrequency = "weekly" | "monthly";
+
+export type NewsletterSignupParams = {
+  email: string;
+  frequency: NewsletterFrequency;
+};
+
+const FREQUENCY_LABEL: Record<NewsletterFrequency, string> = {
+  weekly: "Weekly digest",
+  monthly: "Monthly roundup",
+};
+
+function audienceIdFor(frequency: NewsletterFrequency): string | null {
+  const id =
+    frequency === "weekly"
+      ? process.env.NEWSLETTER_AUDIENCE_WEEKLY_ID
+      : process.env.NEWSLETTER_AUDIENCE_MONTHLY_ID;
+  return id && id.trim().length > 0 ? id.trim() : null;
+}
+
+export async function addNewsletterContact(params: NewsletterSignupParams) {
+  const audienceId = audienceIdFor(params.frequency);
+  if (!audienceId) return { skipped: true as const };
+  const result = await getResend().contacts.create({
+    email: params.email,
+    unsubscribed: false,
+    audienceId,
+  });
+  return { skipped: false as const, result };
+}
+
+export async function sendNewsletterSignupNotification(
+  params: NewsletterSignupParams
+) {
+  const subject = `[Newsletter] New signup (${FREQUENCY_LABEL[params.frequency]})`;
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f1e7;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1e7;padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:24px 32px;background:#ede4d3;font-family:Georgia,serif;font-size:18px;font-weight:700;color:#7a4a1f;">
+                New newsletter signup
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
+                <div style="margin-bottom:8px;"><strong>Email:</strong> ${escapeHtml(params.email)}</div>
+                <div><strong>Frequency:</strong> ${escapeHtml(FREQUENCY_LABEL[params.frequency])}</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  const result = await getResend().emails.send({
+    from: CONTACT_FROM,
+    to: CONTACT_TO,
+    replyTo: params.email,
+    subject,
+    html,
+  });
+  return result;
+}

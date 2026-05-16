@@ -57,6 +57,12 @@ export default function Footer() {
               >
                 Contact
               </Link>
+              <Link
+                href="/#newsletter"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Newsletter
+              </Link>
             </nav>
           </div>
 
