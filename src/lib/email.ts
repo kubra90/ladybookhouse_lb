@@ -245,6 +245,75 @@ export async function addNewsletterContact(params: NewsletterSignupParams) {
   return { skipped: false as const, result };
 }
 
+const STORE_URL = (
+  process.env.STORE_URL || "https://theladybookhouse.com"
+).replace(/\/+$/, "");
+
+export async function sendNewsletterWelcomeEmail(
+  params: NewsletterSignupParams
+) {
+  const cadenceWord = params.frequency === "weekly" ? "weekly" : "monthly";
+  const cadenceLabel =
+    params.frequency === "weekly" ? "weekly digest" : "monthly roundup";
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f1e7;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f1e7;padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td style="padding:32px 32px 16px 32px;text-align:center;background:#ede4d3;">
+                <div style="font-family:Georgia,serif;font-size:24px;font-weight:700;color:#7a4a1f;letter-spacing:0.5px;">
+                  Welcome to Lady Bookhouse
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
+                <p style="margin:0 0 16px 0;">Hi there,</p>
+                <p style="margin:0 0 16px 0;">
+                  Thank you for joining us &mdash; you&rsquo;ll get our
+                  <strong>${cadenceLabel}</strong> of newly listed books,
+                  hand-picked from this ${cadenceWord}&rsquo;s arrivals.
+                </p>
+                <p style="margin:0 0 24px 0;">
+                  While you wait for your first issue, you&rsquo;re always
+                  welcome to browse our shelves.
+                </p>
+                <div style="text-align:center;margin:32px 0;">
+                  <a href="${STORE_URL}/books"
+                     style="display:inline-block;padding:12px 28px;background:#7a4a1f;color:#ffffff;text-decoration:none;border-radius:6px;font-family:Georgia,serif;font-weight:600;">
+                    Browse Books
+                  </a>
+                </div>
+                <p style="margin:0 0 0 0;">
+                  With love,<br />
+                  Lady Bookhouse
+                </p>
+                <p style="margin:32px 0 0 0;color:#7a6a55;font-size:12px;line-height:1.6;">
+                  Don&rsquo;t want these emails? Just reply with
+                  &ldquo;unsubscribe&rdquo; and we&rsquo;ll take you off the
+                  list.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  const subject = "Welcome to Lady Bookhouse — you're on the list";
+  const result = await getResend().emails.send({
+    from: FROM,
+    to: params.email,
+    subject,
+    html,
+  });
+  return result;
+}
+
 export async function sendNewsletterSignupNotification(
   params: NewsletterSignupParams
 ) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   addNewsletterContact,
   sendNewsletterSignupNotification,
+  sendNewsletterWelcomeEmail,
   type NewsletterFrequency,
 } from "@/lib/email";
 
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Could not save your signup. Please try again later." },
       { status: 500 }
+    );
+  }
+
+  try {
+    await sendNewsletterWelcomeEmail({ email, frequency });
+  } catch (err) {
+    console.error(
+      "[/api/subscribe] sendNewsletterWelcomeEmail failed:",
+      err
     );
   }
 
