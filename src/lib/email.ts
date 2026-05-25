@@ -259,9 +259,9 @@ export async function sendNewsletterWelcomeEmail(
               <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
                 <p style="margin:0 0 16px 0;">Hi there,</p>
                 <p style="margin:0 0 16px 0;">
-                  Thank you for joining us &mdash; once a month, we&rsquo;ll
-                  send you a <strong>curated roundup</strong> of newly listed
-                  books, hand-picked from our latest arrivals.
+                  Thank you for joining us. Once a month, we&rsquo;ll send you
+                  a <strong>curated roundup</strong> of newly listed books,
+                  hand picked from our latest arrivals.
                 </p>
                 <p style="margin:0 0 24px 0;">
                   While you wait for your first issue, you&rsquo;re always
@@ -290,7 +290,7 @@ export async function sendNewsletterWelcomeEmail(
     </table>
   </body>
 </html>`;
-  const subject = "Welcome to Lady Bookhouse — you're on the list";
+  const subject = "Welcome to Lady Bookhouse";
   const result = await getResend().emails.send({
     from: FROM,
     to: params.email,
