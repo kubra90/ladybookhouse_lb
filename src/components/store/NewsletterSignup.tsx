@@ -74,8 +74,8 @@ export default function NewsletterSignup() {
               Don&apos;t miss a good book
             </h2>
             <p className="font-serif text-muted-foreground leading-relaxed">
-              Get our hand-picked new arrivals once a month.
-              No spam, just stories — unsubscribe anytime.
+              Get our hand picked new arrivals once a month.
+              No spam, just stories. Unsubscribe anytime.
             </p>
           </div>
 
