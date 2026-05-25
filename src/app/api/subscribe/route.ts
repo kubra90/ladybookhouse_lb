@@ -3,22 +3,16 @@ import {
   addNewsletterContact,
   sendNewsletterSignupNotification,
   sendNewsletterWelcomeEmail,
-  type NewsletterFrequency,
 } from "@/lib/email";
 
 export const runtime = "edge";
 
 type SubscribePayload = {
   email?: string;
-  frequency?: string;
   website?: string;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function isFrequency(value: string): value is NewsletterFrequency {
-  return value === "weekly" || value === "monthly";
-}
 
 export async function POST(request: Request) {
   let body: SubscribePayload;
@@ -33,7 +27,6 @@ export async function POST(request: Request) {
   }
 
   const email = (body.email ?? "").trim().toLowerCase();
-  const frequency = (body.frequency ?? "").trim();
 
   if (!email || !EMAIL_RE.test(email) || email.length > 254) {
     return NextResponse.json(
@@ -41,18 +34,12 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  if (!isFrequency(frequency)) {
-    return NextResponse.json(
-      { error: "Please choose how often you'd like to hear from us" },
-      { status: 400 }
-    );
-  }
 
   try {
-    const audienceResult = await addNewsletterContact({ email, frequency });
+    const audienceResult = await addNewsletterContact({ email });
     if (audienceResult.skipped) {
       console.warn(
-        `[/api/subscribe] NEWSLETTER_AUDIENCE_${frequency.toUpperCase()}_ID is not set — skipping Resend audience add`
+        "[/api/subscribe] NEWSLETTER_AUDIENCE_ID is not set — skipping Resend audience add"
       );
     }
   } catch (err) {
@@ -60,7 +47,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendNewsletterSignupNotification({ email, frequency });
+    await sendNewsletterSignupNotification({ email });
   } catch (err) {
     console.error(
       "[/api/subscribe] sendNewsletterSignupNotification failed:",
@@ -73,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await sendNewsletterWelcomeEmail({ email, frequency });
+    await sendNewsletterWelcomeEmail({ email });
   } catch (err) {
     console.error(
       "[/api/subscribe] sendNewsletterWelcomeEmail failed:",

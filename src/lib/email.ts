@@ -214,28 +214,17 @@ export async function sendContactEmail(params: ContactEmailParams) {
   return result;
 }
 
-export type NewsletterFrequency = "weekly" | "monthly";
-
 export type NewsletterSignupParams = {
   email: string;
-  frequency: NewsletterFrequency;
 };
 
-const FREQUENCY_LABEL: Record<NewsletterFrequency, string> = {
-  weekly: "Weekly digest",
-  monthly: "Monthly roundup",
-};
-
-function audienceIdFor(frequency: NewsletterFrequency): string | null {
-  const id =
-    frequency === "weekly"
-      ? process.env.NEWSLETTER_AUDIENCE_WEEKLY_ID
-      : process.env.NEWSLETTER_AUDIENCE_MONTHLY_ID;
+function newsletterAudienceId(): string | null {
+  const id = process.env.NEWSLETTER_AUDIENCE_ID;
   return id && id.trim().length > 0 ? id.trim() : null;
 }
 
 export async function addNewsletterContact(params: NewsletterSignupParams) {
-  const audienceId = audienceIdFor(params.frequency);
+  const audienceId = newsletterAudienceId();
   if (!audienceId) return { skipped: true as const };
   const result = await getResend().contacts.create({
     email: params.email,
@@ -252,9 +241,6 @@ const STORE_URL = (
 export async function sendNewsletterWelcomeEmail(
   params: NewsletterSignupParams
 ) {
-  const cadenceWord = params.frequency === "weekly" ? "weekly" : "monthly";
-  const cadenceLabel =
-    params.frequency === "weekly" ? "weekly digest" : "monthly roundup";
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f6f1e7;">
@@ -273,9 +259,9 @@ export async function sendNewsletterWelcomeEmail(
               <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
                 <p style="margin:0 0 16px 0;">Hi there,</p>
                 <p style="margin:0 0 16px 0;">
-                  Thank you for joining us &mdash; you&rsquo;ll get our
-                  <strong>${cadenceLabel}</strong> of newly listed books,
-                  hand-picked from this ${cadenceWord}&rsquo;s arrivals.
+                  Thank you for joining us &mdash; once a month, we&rsquo;ll
+                  send you a <strong>curated roundup</strong> of newly listed
+                  books, hand-picked from our latest arrivals.
                 </p>
                 <p style="margin:0 0 24px 0;">
                   While you wait for your first issue, you&rsquo;re always
@@ -317,7 +303,7 @@ export async function sendNewsletterWelcomeEmail(
 export async function sendNewsletterSignupNotification(
   params: NewsletterSignupParams
 ) {
-  const subject = `[Newsletter] New signup (${FREQUENCY_LABEL[params.frequency]})`;
+  const subject = `[Newsletter] New signup`;
   const html = `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f6f1e7;">
@@ -332,8 +318,7 @@ export async function sendNewsletterSignupNotification(
             </tr>
             <tr>
               <td style="padding:32px;font-family:Georgia,serif;color:#3a2e1f;line-height:1.6;">
-                <div style="margin-bottom:8px;"><strong>Email:</strong> ${escapeHtml(params.email)}</div>
-                <div><strong>Frequency:</strong> ${escapeHtml(FREQUENCY_LABEL[params.frequency])}</div>
+                <div><strong>Email:</strong> ${escapeHtml(params.email)}</div>
               </td>
             </tr>
           </table>

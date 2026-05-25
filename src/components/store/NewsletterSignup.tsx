@@ -6,14 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
-type Frequency = "weekly" | "monthly";
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function NewsletterSignup() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [frequency, setFrequency] = useState<Frequency>("monthly");
   const [honeypot, setHoneypot] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -34,7 +31,6 @@ export default function NewsletterSignup() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: trimmed,
-          frequency,
           website: honeypot,
         }),
       });
@@ -52,9 +48,7 @@ export default function NewsletterSignup() {
 
       toast({
         title: "You're on the list!",
-        description: `We'll send you our ${
-          frequency === "weekly" ? "weekly digest" : "monthly roundup"
-        } of new arrivals.`,
+        description: "We'll send you our monthly roundup of new arrivals.",
       });
       setEmail("");
     } catch {
@@ -80,7 +74,7 @@ export default function NewsletterSignup() {
               Don&apos;t miss a good book
             </h2>
             <p className="font-serif text-muted-foreground leading-relaxed">
-              Get our hand-picked new arrivals delivered to your inbox.
+              Get our hand-picked new arrivals once a month.
               No spam, just stories — unsubscribe anytime.
             </p>
           </div>
@@ -127,39 +121,6 @@ export default function NewsletterSignup() {
                 <p className="text-xs text-destructive mt-1">{emailError}</p>
               )}
             </div>
-
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium mb-1.5">
-                How often?
-              </legend>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(["weekly", "monthly"] as const).map((value) => {
-                  const selected = frequency === value;
-                  return (
-                    <label
-                      key={value}
-                      className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2.5 text-sm transition-colors ${
-                        selected
-                          ? "border-primary bg-primary/5"
-                          : "border-input bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="frequency"
-                        value={value}
-                        checked={selected}
-                        onChange={() => setFrequency(value)}
-                        className="h-4 w-4 accent-primary"
-                      />
-                      <span className="font-medium">
-                        {value === "weekly" ? "Weekly digest" : "Monthly roundup"}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
 
             <Button
               type="submit"
