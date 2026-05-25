@@ -5,6 +5,7 @@ import { BookOpen, Heart, Package, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import BookCard from "@/components/store/BookCard";
+import NewsletterSignup from "@/components/store/NewsletterSignup";
 import { fetchAllAvailableBooks, isConfigured } from "@/lib/aob-client";
 import { bookOfTheWeek } from "@/lib/book-of-the-week";
 import { placeholderBooks } from "@/lib/placeholder-books";
@@ -184,6 +185,9 @@ export default async function HomePage() {
           </Link>
         </div>
       </section>
+
+      {/* Newsletter signup */}
+      <NewsletterSignup />
 
       {/* About the Shop */}
       <section className="bg-warm-sand/50">
