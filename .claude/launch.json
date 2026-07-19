@@ -3,8 +3,14 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "/usr/local/bin/node",
-      "runtimeArgs": ["node_modules/.bin/next", "dev"],
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "-u", "AOB_USERNAME",
+        "-u", "AOB_PASSWORD",
+        "/usr/local/bin/node",
+        "node_modules/.bin/next",
+        "dev"
+      ],
       "port": 3000
     }
   ]

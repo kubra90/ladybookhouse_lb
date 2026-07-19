@@ -68,6 +68,15 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        marquee: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-50%)" },
+        },
+      },
+      animation: {
+        marquee: "marquee 45s linear infinite",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

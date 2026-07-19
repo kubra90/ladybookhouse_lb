@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import BookCard from "@/components/store/BookCard";
 import NewsletterSignup from "@/components/store/NewsletterSignup";
+import TravelBooksRow from "@/components/store/TravelBooksRow";
 import { fetchAllAvailableBooks, isConfigured } from "@/lib/aob-client";
 import { bookOfTheWeek } from "@/lib/book-of-the-week";
 import { placeholderBooks } from "@/lib/placeholder-books";
@@ -63,6 +64,10 @@ export default async function HomePage() {
   const featuredBook = bookOfTheWeek.bookId
     ? allBooks.find((b) => b.id === bookOfTheWeek.bookId)
     : undefined;
+  const travelBooks = allBooks
+    .filter((b) => b.category === "Travel" && b.imageUrl)
+    .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""))
+    .slice(0, 12);
 
   return (
     <>
@@ -159,6 +164,9 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Summer travel picks — floating row of covers */}
+      <TravelBooksRow books={travelBooks} />
 
       {/* Featured Books */}
       <section className="container py-16 md:py-20">
