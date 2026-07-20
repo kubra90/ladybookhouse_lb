@@ -66,8 +66,7 @@ export default async function HomePage() {
     : undefined;
   const travelBooks = allBooks
     .filter((b) => b.category === "Travel" && b.imageUrl)
-    .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""))
-    .slice(0, 12);
+    .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""));
 
   return (
     <>
