@@ -29,6 +29,7 @@ interface AoBItem {
   media: string | null;
   publisher: string | null;
   listed_date: string | null;
+  sales_rank: string | null; // Amazon sales rank; lower = more popular
 }
 
 interface AoBResponse {
@@ -148,6 +149,7 @@ function mapItem(item: AoBItem): Book {
     quantity: qty,
     isAvailable: qty > 0,
     listedDate: item.listed_date || undefined,
+    salesRank: parseInt(item.sales_rank || "", 10) || undefined,
   };
 }
 

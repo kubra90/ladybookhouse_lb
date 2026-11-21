@@ -2,10 +2,17 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Book } from "@/types/book";
 
-// Sideways-floating strip of travel book covers, shown under Book of the Week.
+// Sideways-floating strip of seasonal book covers, shown under Book of the
+// Week. The heading and the books come from src/lib/seasonal-shelf.ts.
 // The book list is rendered twice so the marquee loops seamlessly; the copy is
 // aria-hidden so screen readers only announce each book once.
-export default function TravelBooksRow({ books }: { books: Book[] }) {
+export default function SeasonalBooksRow({
+  books,
+  heading,
+}: {
+  books: Book[];
+  heading: string;
+}) {
   if (books.length === 0) return null;
 
   const covers = (ariaHidden: boolean) =>
@@ -34,7 +41,7 @@ export default function TravelBooksRow({ books }: { books: Book[] }) {
     <section className="border-b bg-warm-sand/30">
       <div className="container py-8 md:py-10">
         <p className="mb-5 text-center text-xs font-semibold uppercase tracking-wider text-primary">
-          Books for Your Summer Travels
+          {heading}
         </p>
         {/* Reduced motion: the marquee stops, so let the row scroll by hand instead. */}
         <div className="group/row overflow-hidden motion-reduce:overflow-x-auto">

@@ -11,6 +11,7 @@ export interface Book {
   quantity: number;
   isAvailable: boolean;
   listedDate?: string;
+  salesRank?: number;
 }
 
 export interface CartItem {

@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import BookCard from "@/components/store/BookCard";
 import NewsletterSignup from "@/components/store/NewsletterSignup";
-import TravelBooksRow from "@/components/store/TravelBooksRow";
+import SeasonalBooksRow from "@/components/store/SeasonalBooksRow";
 import { fetchAllAvailableBooks, isConfigured } from "@/lib/aob-client";
 import { bookOfTheWeek } from "@/lib/book-of-the-week";
 import { placeholderBooks } from "@/lib/placeholder-books";
+import { seasonalShelf } from "@/lib/seasonal-shelf";
 import type { Book } from "@/types/book";
 
 export const metadata: Metadata = {
@@ -64,9 +65,16 @@ export default async function HomePage() {
   const featuredBook = bookOfTheWeek.bookId
     ? allBooks.find((b) => b.id === bookOfTheWeek.bookId)
     : undefined;
-  const travelBooks = allBooks
-    .filter((b) => b.category === "Travel" && b.imageUrl)
-    .sort((a, b) => (b.listedDate || "").localeCompare(a.listedDate || ""));
+  const excludedSkus = new Set(seasonalShelf.excludedSkus);
+  const shelfBooks = allBooks
+    .filter(
+      (b) =>
+        b.category === seasonalShelf.category &&
+        b.imageUrl &&
+        !excludedSkus.has(b.id)
+    )
+    // Most popular first; anything without a sales rank goes at the end.
+    .sort((a, b) => (a.salesRank ?? Infinity) - (b.salesRank ?? Infinity));
 
   return (
     <>
@@ -164,8 +172,8 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Summer travel picks — floating row of covers */}
-      <TravelBooksRow books={travelBooks} />
+      {/* Seasonal picks — floating row of covers */}
+      <SeasonalBooksRow books={shelfBooks} heading={seasonalShelf.heading} />
 
       {/* Featured Books */}
       <section className="container py-16 md:py-20">
