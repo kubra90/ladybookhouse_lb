@@ -34,4 +34,11 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Nothing on the page should pan sideways. A wide row (the seasonal book
+     shelf) scrolls inside its own container instead. `clip` rather than
+     `hidden` so the sticky header keeps working. */
+  html,
+  body {
+    overflow-x: clip;
+  }
 }
