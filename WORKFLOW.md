@@ -449,6 +449,24 @@ Email-arrival fix from prior session (commit `a30f70c` — `await runSideEffects
 
 ---
 
+## Phase 18 — Seasonal Row Rebuilt as a Real Scroller ✅
+**Completed:** 2026-11-22
+
+- [x] **Root cause of "it doesn't scroll on the phone":** the row was a CSS `animation` on a ~12,656px track inside an `overflow: hidden` box. That is not a scroll container, so touch does nothing with it — a finger on the covers panned the page instead. It drifted on its own, which is why it looked alive and refused to be touched.
+- [x] Replaced the CSS marquee with a horizontal scroll container (`overflow-x: auto`) that JS advances by setting `scrollLeft` each frame. Touch, momentum and swipe are now native browser scrolling.
+- [x] Position is derived from **absolute elapsed time**, not accumulated per-frame deltas. The accumulating form (`offset += SPEED * dt`) was measured running at 320–512 px/s instead of 47 and is not safe.
+- [x] Pauses on pointer/touch/hover, resumes 2.5s later from wherever the visitor left it. Reduced-motion visitors get a still row they can still swipe.
+- [x] Added `overscroll-behavior-x: contain` on the row and `overflow-x: clip` on `html, body` (`clip`, not `hidden`, so the sticky header keeps working).
+- [x] Removed the now-unused `marquee` keyframes from `tailwind.config.ts`.
+- [x] Verified on the live site at 375px: `overflow-x` is `auto`, a swipe to 900px is accepted and held, the page does not pan sideways, and no `.animate-marquee` element remains.
+
+**Notes:**
+- **An earlier diagnosis in this session was wrong.** The stuck row was blamed on the phone's Reduce Motion setting; a screen recording showed the carousel auto-scrolling, which means motion was on and the real problem was the untouchable `overflow: hidden` box. Lesson: the preview browser used for testing **always reports `prefers-reduced-motion: reduce`**, so it cannot exercise the motion-enabled path and must not be trusted to characterise a phone.
+- **Local verification of this row is limited.** `next start` against a production build renders no row at all (the AoB fetch doesn't resolve in that mode), and dev-mode StrictMode double-mounts the effect. The live site at mobile width is the only faithful check.
+- **Known minor regression:** the duplicate cover set is no longer hidden for reduced-motion visitors (the seamless wrap needs it), so swiping far enough shows the 44 books a second time. Re-adding `motion-reduce:hidden` to the duplicate links would fix it without affecting the animated path.
+
+---
+
 ## Session Log
 
 | Date | Phase | Summary |
@@ -471,3 +489,4 @@ Email-arrival fix from prior session (commit `a30f70c` — `await runSideEffects
 | 2026-07-20 | 16 | Summer travel books marquee shipped. New `TravelBooksRow` component under Book of the Week: auto-scrolling strip of all in-stock Travel-category covers (24 today), newest first, pause on hover, reduced-motion fallback. Pulled live from AoB so it self-updates. Started at a 12-book cap, uncapped after user feedback (loop slowed to 90s to match speed). Diagnosed local dev falling back to placeholders: stale `AOB_*` exports in `~/.bash_profile` override `.env.local` and AoB returns 200 + `{"results":"Bad token"}` on bad auth; dev launch config fixed, bash_profile cleanup still manual. Confirmed pushes to `main` auto-deploy via Cloudflare Pages Git integration (Phase 12 CLI-deploy note outdated). Commits `925e018`, `cc6cd93`. |
 | 2026-11-20 | 17 | Seasonal shelf swapped from summer travel to Thanksgiving cookbooks. `TravelBooksRow` generalized into `SeasonalBooksRow` + new `src/lib/seasonal-shelf.ts` config (heading / category / excludedSkus), so future seasonal swaps need no component edits. Added `salesRank` to the `Book` type and mapped AoB's `sales_rank` so the row can sort by popularity instead of listing date. Audited the catalog: 79 cookbook records, 52 in stock, 49 ranked; user reviewed all 52 and cut 8 off-theme SKUs (nutrition guides, a gardening book) leaving 44 covers. Heading "Gather Round the Table". Marquee retimed 90s → 135s to hold the ~50 px/s drift at the longer row width. Noted AoB cookbook miscategorization as a dashboard cleanup item. |
 | 2026-11-22 | 17 | Mobile fix for the cookbooks row. Reported as "doesn't scroll on the phone"; reproduced at 375px on the live site. Two causes: (1) the device reports reduced motion, so the marquee is intentionally disabled and the row falls back to hand-scrolling, and (2) that fallback opened pinned to its far right edge (`scrollLeft` 5865/6009), showing the last cover with nowhere to swipe. `SeasonalBooksRow` is now a client component that re-pins the row to the start as each cover loads and releases on first touch; added `[overflow-anchor:none]`. Verified fresh loads start at Magnolia Table and that a manual swipe to 1200 holds against later image-load events. |
+| 2026-11-22 | 18 | Seasonal row rebuilt as a real scroll container after "doesn't scroll on the phone" turned out to be a swipe problem, not a motion one: a CSS marquee on a 12,656px track inside `overflow: hidden` is untouchable, so a finger moved the page instead of the row. JS now drives `scrollLeft` from absolute elapsed time (the accumulating `+= SPEED * dt` form measured 320–512 px/s against a target of 47), pausing on touch/hover and resuming 2.5s later. Added `overscroll-x: contain` and `overflow-x: clip` on html/body after an iPhone recording showed the page panning with the header cut off. Marquee keyframes removed. Verified live at 375px. Corrected an earlier wrong diagnosis blaming Reduce Motion — the test browser always reports reduced motion and cannot characterise a phone. |
